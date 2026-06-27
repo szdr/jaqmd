@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jaqmd"
+version = "0.1.0"
+description = "日本語ドキュメントに特化したローカル検索エンジン"
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.12",
+    "sqlite-vec>=0.1",
+]
+
+[project.optional-dependencies]
+morph  = ["sudachipy>=0.6", "sudachidict-core"]
+vector = ["fastembed>=0.8"]
+all    = ["sudachipy>=0.6", "sudachidict-core", "fastembed>=0.8"]
+
+[project.scripts]
+jaqmd = "jaqmd.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jaqmd"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
