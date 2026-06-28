@@ -112,3 +112,6 @@ def test_result_fields(indexed_conn):
     assert r.score > 0
     # snippet は空でも可（短い文書の場合）
     assert isinstance(r.snippet, str)
+    assert isinstance(r.body, str)
+    # body は原文全文
+    assert r.body == "形態素解析は日本語の自然言語処理の基礎技術です"

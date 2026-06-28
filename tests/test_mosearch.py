@@ -87,6 +87,26 @@ def test_result_fields(morph_conn):
     assert r.filepath
     assert r.score > 0
     assert isinstance(r.snippet, str)
+    assert isinstance(r.body, str)
+
+
+def test_snippet_is_original_text(morph_conn):
+    """スニペットが正規化形の分かち書きではなく原文テキストを含む。"""
+    results = mosearch(morph_conn, "形態素解析")
+    assert results
+    r = results[0]
+    # 正規化形の分かち書き（空白区切りのひらがな・カタカナが連続）は含まれない
+    # 原文に含まれる文字列がスニペットに現れる
+    assert "形態素解析" in r.snippet or "日本語" in r.snippet
+
+
+def test_body_is_original_text(morph_conn):
+    """body フィールドが原文全文を保持している。"""
+    results = mosearch(morph_conn, "形態素解析")
+    assert results
+    r = results[0]
+    # body は原文そのもの（正規化形分かち書きではない）
+    assert r.body == "形態素解析は日本語の自然言語処理の基礎技術です"
 
 
 def test_collection_filter(conn, tmp_path):

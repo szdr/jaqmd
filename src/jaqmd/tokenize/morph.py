@@ -38,3 +38,22 @@ def to_fts_query(query: str) -> str:
             escaped = norm.replace('"', '""')
             parts.append(f'"{escaped}"')
     return " OR ".join(parts)
+
+
+def snippet_terms(query: str) -> list[str]:
+    """クエリを形態素解析し、surface 形と正規化形の両方を重複排除して返す。
+
+    原文スニペット生成時の探索候補として使用する。
+    """
+    query = query.strip()
+    if not query:
+        return []
+    tokenizer = _get_tokenizer()
+    seen: set[str] = set()
+    terms: list[str] = []
+    for m in tokenizer.tokenize(query):
+        for form in (m.surface(), m.normalized_form()):
+            if form and form not in seen:
+                seen.add(form)
+                terms.append(form)
+    return terms

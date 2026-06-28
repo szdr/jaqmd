@@ -14,6 +14,7 @@ class SearchResult:
     filepath: str
     title: str
     snippet: str
+    body: str = ""
 
 
 def trisearch(
@@ -45,7 +46,8 @@ def trisearch(
             docid,
             filepath,
             title,
-            snippet(docs_fts_trigram, 3, '', '', '...', 20) AS snippet,
+            body,
+            snippet(docs_fts_trigram, 3, '', '', '...', 40) AS snippet,
             bm25(docs_fts_trigram) AS score
         FROM docs_fts_trigram
         WHERE {where_sql}
@@ -66,6 +68,7 @@ def trisearch(
                 filepath=row["filepath"],
                 title=row["title"] or "",
                 snippet=row["snippet"] or "",
+                body=row["body"] or "",
             )
         )
     return results

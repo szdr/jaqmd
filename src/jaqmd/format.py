@@ -17,7 +17,7 @@ def format_results(
         return "No results found."
 
     dispatch = {
-        "json": _fmt_json,
+        "json": lambda r: _fmt_json(r, full=full),
         "md": lambda r: _fmt_md(r, full=full),
         "xml": _fmt_xml,
         "files": _fmt_files,
@@ -34,22 +34,25 @@ def _fmt_default(results: list, *, full: bool) -> str:
         label = r.title or r.filepath
         lines.append(f"[{r.docid}] {label}  (score: {r.score:.3f})")
         lines.append(f"  {r.filepath}")
-        lines.append(f"  {r.snippet}")
+        text = r.body if full else r.snippet
+        lines.append(f"  {text}")
         lines.append("")
     return "\n".join(lines).rstrip()
 
 
-def _fmt_json(results: list) -> str:
-    data = [
-        {
+def _fmt_json(results: list, *, full: bool = False) -> str:
+    data = []
+    for r in results:
+        entry: dict = {
             "docid": r.docid,
             "score": r.score,
             "filepath": r.filepath,
             "title": r.title,
             "snippet": r.snippet,
         }
-        for r in results
-    ]
+        if full:
+            entry["body"] = r.body
+        data.append(entry)
     return json.dumps(data, ensure_ascii=False, indent=2)
 
 
@@ -61,7 +64,8 @@ def _fmt_md(results: list, *, full: bool) -> str:
         lines.append(f"- **docid**: `{r.docid}`")
         lines.append(f"- **score**: {r.score:.3f}")
         lines.append("")
-        lines.append(r.snippet)
+        text = r.body if full else r.snippet
+        lines.append(text)
         lines.append("")
     return "\n".join(lines).rstrip()
 
