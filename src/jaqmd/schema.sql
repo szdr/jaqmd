@@ -50,6 +50,16 @@ CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts_trigram USING fts5(
     tokenize = 'trigram'
 );
 
+-- FTS: morph（形態素解析、unicode61 tokenizer で分かち書き済みテキストを格納）
+-- INSERT は Python 側（jaqmd morph）で実行。DELETE 系のみトリガーで同期。
+CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts_morph USING fts5(
+    docid    UNINDEXED,
+    filepath UNINDEXED,
+    title,
+    body,
+    tokenize = 'unicode61'
+);
+
 -- INSERT 後: FTS に追加
 DROP TRIGGER IF EXISTS documents_ai;
 CREATE TRIGGER documents_ai AFTER INSERT ON documents
@@ -62,7 +72,7 @@ WHEN NEW.active = 1 BEGIN
     FROM content c WHERE c.hash = NEW.hash;
 END;
 
--- UPDATE: hash 変更時（active=1）→ FTS を差し替え
+-- UPDATE: hash 変更時（active=1）→ trigram FTS を差し替え、morph FTS からは削除のみ
 DROP TRIGGER IF EXISTS documents_au_hash;
 CREATE TRIGGER documents_au_hash AFTER UPDATE ON documents
 WHEN NEW.active = 1 AND NEW.hash != OLD.hash BEGIN
@@ -73,6 +83,7 @@ WHEN NEW.active = 1 AND NEW.hash != OLD.hash BEGIN
            NEW.title,
            c.body
     FROM content c WHERE c.hash = NEW.hash;
+    DELETE FROM docs_fts_morph WHERE docid = OLD.docid;
 END;
 
 -- UPDATE: 再活性化（active 0→1、hash 変更なし）→ FTS に追加
@@ -92,6 +103,7 @@ DROP TRIGGER IF EXISTS documents_soft_delete;
 CREATE TRIGGER documents_soft_delete AFTER UPDATE ON documents
 WHEN OLD.active = 1 AND NEW.active = 0 BEGIN
     DELETE FROM docs_fts_trigram WHERE docid = OLD.docid;
+    DELETE FROM docs_fts_morph WHERE docid = OLD.docid;
 END;
 
 -- DELETE: ハード削除時も FTS から削除
@@ -99,4 +111,5 @@ DROP TRIGGER IF EXISTS documents_delete;
 CREATE TRIGGER documents_delete AFTER DELETE ON documents
 WHEN OLD.active = 1 BEGIN
     DELETE FROM docs_fts_trigram WHERE docid = OLD.docid;
+    DELETE FROM docs_fts_morph WHERE docid = OLD.docid;
 END;

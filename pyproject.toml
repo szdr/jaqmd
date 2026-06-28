@@ -13,7 +13,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-morph  = ["sudachipy>=0.6", "sudachidict-core"]
+morph  = [
+    "sudachipy>=0.6",
+    "sudachidict-core",
+]
 vector = ["fastembed>=0.8"]
 all    = ["sudachipy>=0.6", "sudachidict-core", "fastembed>=0.8"]
 

@@ -130,10 +130,34 @@ def test_cleanup_command(tmp_cache, doc_dir):
     assert "完了" in result.output
 
 
-def test_morph_unimplemented(tmp_cache):
+def test_morph_requires_trigram_index(tmp_cache, doc_dir):
+    """trigram インデックスなしでは morph が失敗する。"""
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
     result = runner.invoke(app, ["morph"])
     assert result.exit_code != 0
-    assert "未実装" in result.output
+    assert "update" in result.output
+
+
+def test_morph_builds_index(tmp_cache, doc_dir):
+    """update 後に morph が成功し、完了メッセージを出力する。"""
+    pytest.importorskip("sudachipy")
+    (doc_dir / "a.md").write_text("# サーバー設定\nサーバーの設定と運用について説明します。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    result = runner.invoke(app, ["morph"])
+    assert result.exit_code == 0
+    assert "完了" in result.output
+
+
+def test_morph_is_idempotent(tmp_cache, doc_dir):
+    """morph を2回実行しても問題ない（冪等性）。"""
+    pytest.importorskip("sudachipy")
+    (doc_dir / "a.md").write_text("# テスト\n内容です。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    runner.invoke(app, ["morph"])
+    result = runner.invoke(app, ["morph"])
+    assert result.exit_code == 0
 
 
 def test_embed_unimplemented(tmp_cache):
@@ -142,10 +166,54 @@ def test_embed_unimplemented(tmp_cache):
     assert "未実装" in result.output
 
 
-def test_mosearch_unimplemented(tmp_cache):
+def test_mosearch_without_morph_index(tmp_cache, doc_dir):
+    """morph インデックスなしでは mosearch が失敗し morph を案内する。"""
+    (doc_dir / "a.md").write_text("# テスト\n内容です。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
     result = runner.invoke(app, ["mosearch", "テスト"])
     assert result.exit_code != 0
     assert "morph" in result.output
+
+
+def test_mosearch_with_results(tmp_cache, doc_dir):
+    """morph 実行後に mosearch が成功する。"""
+    pytest.importorskip("sudachipy")
+    (doc_dir / "a.md").write_text("# サーバー設定\nサーバーの設定と運用について詳しく説明します。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    runner.invoke(app, ["morph"])
+    result = runner.invoke(app, ["mosearch", "サーバ"])
+    assert result.exit_code == 0
+    assert len(result.output.strip()) > 0
+
+
+def test_mosearch_server_variant(tmp_cache, doc_dir):
+    """サーバ と サーバー で同じ文書がヒットする（形態素正規化）。"""
+    pytest.importorskip("sudachipy")
+    (doc_dir / "a.md").write_text("# サーバー設定\nサーバーの設定と運用について詳しく説明します。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    runner.invoke(app, ["morph"])
+    result_short = runner.invoke(app, ["mosearch", "サーバ"])
+    result_long = runner.invoke(app, ["mosearch", "サーバー"])
+    assert result_short.exit_code == 0
+    assert result_long.exit_code == 0
+    # 両方とも同じファイルにヒット
+    assert "a.md" in result_short.output or len(result_short.output.strip()) > 0
+    assert "a.md" in result_long.output or len(result_long.output.strip()) > 0
+
+
+def test_status_shows_morph_indexed(tmp_cache, doc_dir):
+    """morph 後の status で morph FTS が ✓ になる。"""
+    pytest.importorskip("sudachipy")
+    (doc_dir / "a.md").write_text("# テスト\n内容です。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    runner.invoke(app, ["morph"])
+    result = runner.invoke(app, ["status"])
+    assert result.exit_code == 0
+    assert "✓" in result.output
 
 
 def test_vsearch_unimplemented(tmp_cache):

@@ -8,6 +8,7 @@ import typer
 from .format import format_results
 from .scan import scan_collection
 from .search.trisearch import trisearch as do_trisearch
+from .search.mosearch import mosearch as do_mosearch
 from .store import (
     add_collection,
     connect,
@@ -150,17 +151,20 @@ def _run_search(
     md: bool,
     xml: bool,
     files: bool,
+    search_fn=None,
+    meta_key: str = "trigram_indexed",
+    meta_missing_msg: str = (
+        "エラー: trigram インデックスが構築されていません。\n"
+        "→ `jaqmd update` を実行してください。"
+    ),
 ) -> None:
     conn = connect()
-    if get_meta(conn, "trigram_indexed") != "1":
-        typer.echo(
-            "エラー: trigram インデックスが構築されていません。\n"
-            "→ `jaqmd update` を実行してください。",
-            err=True,
-        )
+    if get_meta(conn, meta_key) != "1":
+        typer.echo(meta_missing_msg, err=True)
         raise typer.Exit(1)
 
-    results = do_trisearch(
+    fn = search_fn or do_trisearch
+    results = fn(
         conn, query, n=n, collection=collection,
         min_score=min_score, all_results=all_results,
     )
@@ -358,13 +362,51 @@ def cleanup() -> None:
 
 @app.command()
 def morph() -> None:
-    """形態素解析インデックスを構築します（次イテレーション対応予定）。"""
-    typer.echo(
-        "エラー: 形態素解析インデックス機能は未実装です（次イテレーション対応予定）。\n"
-        "→ 現状は `jaqmd search \"<query>\"` をご利用ください。",
-        err=True,
-    )
-    raise typer.Exit(1)
+    """形態素解析インデックスを構築します。"""
+    try:
+        from .tokenize.morph import tokenize_text
+    except ImportError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    conn = connect()
+    if get_meta(conn, "trigram_indexed") != "1":
+        typer.echo(
+            "エラー: trigram インデックスが構築されていません。\n"
+            "→ 先に `jaqmd update` を実行してください。",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    typer.echo("形態素インデックスを構築中...")
+
+    # 既存エントリを削除してから再投入（冪等）
+    conn.execute("DELETE FROM docs_fts_morph")
+
+    rows = conn.execute(
+        """SELECT d.docid, d.collection, d.path, d.title, c.body
+           FROM documents d JOIN content c ON d.hash = c.hash
+           WHERE d.active = 1"""
+    ).fetchall()
+
+    for row in rows:
+        tokenized_title = tokenize_text(row["title"] or "")
+        tokenized_body = tokenize_text(row["body"] or "")
+        conn.execute(
+            "INSERT INTO docs_fts_morph(docid, filepath, title, body) VALUES (?, ?, ?, ?)",
+            (
+                row["docid"],
+                row["collection"] + "/" + row["path"],
+                tokenized_title,
+                tokenized_body,
+            ),
+        )
+
+    set_meta(conn, "morph_indexed", "1")
+    set_meta(conn, "morph_tokenizer", "sudachipy/normalized_form")
+    conn.commit()
+
+    typer.echo(f"完了: {len(rows)} 件の形態素インデックスを構築しました。")
 
 
 @app.command()
@@ -381,15 +423,28 @@ def embed() -> None:
 @app.command()
 def mosearch(
     query: str = typer.Argument(..., help="検索クエリ"),
+    n: int = typer.Option(5, "-n", help="結果件数"),
+    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
+    all_results: bool = typer.Option(False, "--all", help="全件返却"),
+    full: bool = typer.Option(False, "--full", help="全文表示"),
+    json_out: bool = typer.Option(False, "--json", help="JSON 出力"),
+    md: bool = typer.Option(False, "--md", help="Markdown 出力"),
+    xml: bool = typer.Option(False, "--xml", help="XML 出力"),
+    files: bool = typer.Option(False, "--files", help="files 形式出力"),
 ) -> None:
-    """形態素 BM25 検索（次イテレーション対応予定）。"""
-    typer.echo(
-        "エラー: 形態素インデックスがありません（次イテレーション対応予定）。\n"
-        "→ `jaqmd morph` を実行してから再試行してください。\n"
-        "→ 現状は `jaqmd search \"<query>\"` をご利用ください。",
-        err=True,
+    """形態素 BM25 検索を実行します。"""
+    _run_search(
+        query, n=n, collection=collection, min_score=min_score,
+        all_results=all_results, full=full, json_out=json_out,
+        md=md, xml=xml, files=files,
+        search_fn=do_mosearch,
+        meta_key="morph_indexed",
+        meta_missing_msg=(
+            "エラー: 形態素インデックスが構築されていません。\n"
+            "→ `jaqmd morph` を実行してください。"
+        ),
     )
-    raise typer.Exit(1)
 
 
 @app.command()
