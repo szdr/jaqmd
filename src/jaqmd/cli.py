@@ -7,7 +7,7 @@ import typer
 
 from .format import format_results
 from .scan import scan_collection
-from .search.bisearch import bisearch as do_bisearch
+from .search.trisearch import trisearch as do_trisearch
 from .store import (
     add_collection,
     connect,
@@ -85,7 +85,7 @@ def collection_remove(
 def update(
     pull: bool = typer.Option(False, "--pull", help="（予約）"),
 ) -> None:
-    """ファイルをスキャンして bigram FTS インデックスを構築します。"""
+    """ファイルをスキャンして trigram FTS インデックスを構築します。"""
     conn = connect()
     collections = list_collections(conn)
     if not collections:
@@ -128,7 +128,7 @@ def update(
 
         conn.commit()
 
-    set_meta(conn, "bigram_indexed", "1")
+    set_meta(conn, "trigram_indexed", "1")
     conn.commit()
 
     typer.echo(f"完了: {total_added} ファイル処理、{total_deleted} ファイル削除")
@@ -152,15 +152,15 @@ def _run_search(
     files: bool,
 ) -> None:
     conn = connect()
-    if get_meta(conn, "bigram_indexed") != "1":
+    if get_meta(conn, "trigram_indexed") != "1":
         typer.echo(
-            "エラー: bigram インデックスが構築されていません。\n"
+            "エラー: trigram インデックスが構築されていません。\n"
             "→ `jaqmd update` を実行してください。",
             err=True,
         )
         raise typer.Exit(1)
 
-    results = do_bisearch(
+    results = do_trisearch(
         conn, query, n=n, collection=collection,
         min_score=min_score, all_results=all_results,
     )
@@ -179,29 +179,8 @@ def _run_search(
 
 
 # ---------------------------------------------------------------------------
-# bisearch / search
+# search
 # ---------------------------------------------------------------------------
-
-@app.command(name="bisearch")
-def bisearch_command(
-    query: str = typer.Argument(..., help="検索クエリ"),
-    n: int = typer.Option(5, "-n", help="結果件数"),
-    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
-    min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
-    all_results: bool = typer.Option(False, "--all", help="全件返却"),
-    full: bool = typer.Option(False, "--full", help="全文表示"),
-    json_out: bool = typer.Option(False, "--json", help="JSON 出力"),
-    md: bool = typer.Option(False, "--md", help="Markdown 出力"),
-    xml: bool = typer.Option(False, "--xml", help="XML 出力"),
-    files: bool = typer.Option(False, "--files", help="files 形式出力"),
-) -> None:
-    """bigram BM25 検索を実行します。"""
-    _run_search(
-        query, n=n, collection=collection, min_score=min_score,
-        all_results=all_results, full=full, json_out=json_out,
-        md=md, xml=xml, files=files,
-    )
-
 
 @app.command(name="search")
 def search_command(
@@ -216,7 +195,7 @@ def search_command(
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
 ) -> None:
-    """bisearch のエイリアス（qmd 互換）。"""
+    """trigram BM25 検索を実行します。"""
     _run_search(
         query, n=n, collection=collection, min_score=min_score,
         all_results=all_results, full=full, json_out=json_out,
@@ -325,9 +304,9 @@ def status() -> None:
     typer.echo(f"Documents   : {stats['total']:,}")
     typer.echo(sep)
 
-    bigram_ok = stats["bigram"] > 0 or stats["total"] == 0
-    bigram_mark = "✓" if bigram_ok else "✗"
-    typer.echo(f"bigram FTS  : {bigram_mark} {stats['bigram']:,} docs    (jaqmd update)")
+    trigram_ok = stats["trigram"] > 0 or stats["total"] == 0
+    trigram_mark = "✓" if trigram_ok else "✗"
+    typer.echo(f"trigram FTS : {trigram_mark} {stats['trigram']:,} docs    (jaqmd update)")
 
     morph_mark = "✓" if stats["morph_indexed"] else "✗"
     morph_hint = "" if stats["morph_indexed"] else "   → run: jaqmd morph"
@@ -339,7 +318,7 @@ def status() -> None:
 
     typer.echo(sep)
 
-    available = ["bisearch"]
+    available = ["search"]
     unavailable = []
     if stats["morph_indexed"]:
         available.append("mosearch")
@@ -382,7 +361,7 @@ def morph() -> None:
     """形態素解析インデックスを構築します（次イテレーション対応予定）。"""
     typer.echo(
         "エラー: 形態素解析インデックス機能は未実装です（次イテレーション対応予定）。\n"
-        "→ 現状は `jaqmd bisearch \"<query>\"` をご利用ください。",
+        "→ 現状は `jaqmd search \"<query>\"` をご利用ください。",
         err=True,
     )
     raise typer.Exit(1)
@@ -393,7 +372,7 @@ def embed() -> None:
     """ベクトルインデックスを構築します（次イテレーション対応予定）。"""
     typer.echo(
         "エラー: ベクトルインデックス機能は未実装です（次イテレーション対応予定）。\n"
-        "→ 現状は `jaqmd bisearch \"<query>\"` をご利用ください。",
+        "→ 現状は `jaqmd search \"<query>\"` をご利用ください。",
         err=True,
     )
     raise typer.Exit(1)
@@ -407,7 +386,7 @@ def mosearch(
     typer.echo(
         "エラー: 形態素インデックスがありません（次イテレーション対応予定）。\n"
         "→ `jaqmd morph` を実行してから再試行してください。\n"
-        "→ 現状は `jaqmd bisearch \"<query>\"` をご利用ください。",
+        "→ 現状は `jaqmd search \"<query>\"` をご利用ください。",
         err=True,
     )
     raise typer.Exit(1)
@@ -433,7 +412,7 @@ def query(
     """ハイブリッド検索（次イテレーション対応予定）。"""
     typer.echo(
         "エラー: ハイブリッド検索機能は次イテレーション対応予定です。\n"
-        "→ 現状は `jaqmd bisearch \"<query>\"` をご利用ください。",
+        "→ 現状は `jaqmd search \"<query>\"` をご利用ください。",
         err=True,
     )
     raise typer.Exit(1)

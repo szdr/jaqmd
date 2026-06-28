@@ -6,7 +6,7 @@
 
 ## 特徴
 
-- **日本語特化**: bigram検索・形態素解析検索・ベクトル検索の3つを日本語向けに最適化
+- **日本語特化**: trigram検索・形態素解析検索・ベクトル検索の3つを日本語向けに最適化
 - **完全ローカル**: SQLite + sqlite-vec + FTS5 で完結。外部DBやサーバー不要
 - **薄い依存**: PyTorch非依存。ONNX Runtime ベースの軽量構成
 - **段階的なインデックス構築**: 必要な検索機能だけを段階的に有効化できる
@@ -14,12 +14,12 @@
 ## アーキテクチャ概要
 
 ```
-ドキュメント ──► jaqmd update ──► bigram FTS（常時）
+ドキュメント ──► jaqmd update ──► trigram FTS（常時）
                  jaqmd morph  ──► 形態素 FTS（オプション）
                  jaqmd embed  ──► ベクトル（オプション）
 
 検索:
-  jaqmd bisearch  bigram BM25検索
+  jaqmd search    trigram BM25検索
   jaqmd mosearch  形態素解析 BM25検索
   jaqmd vsearch   ベクトル意味検索（ruri-v3）
   jaqmd query     上記を組み合わせ + リランク（推奨）
@@ -38,7 +38,7 @@
 ## インストール
 
 ```bash
-# 最小構成（bigram検索のみ）
+# 最小構成（trigram検索のみ）
 pip install jaqmd
 
 # 形態素解析を使う場合
@@ -59,11 +59,11 @@ pip install "jaqmd[all]"
 # 1. コレクションを追加
 jaqmd collection add ~/Documents/notes --name notes
 
-# 2. インデックスを構築（bigram FTS）
+# 2. インデックスを構築（trigram FTS）
 jaqmd update
 
-# 3. これだけで bigram 検索が使える
-jaqmd bisearch "形態素解析"
+# 3. これだけで trigram 検索が使える
+jaqmd search "形態素解析"
 
 # 4. 形態素解析検索を有効化（任意）
 jaqmd morph
@@ -84,7 +84,7 @@ jaqmd query "日本語の検索エンジンを作りたい"
 | コマンド | 処理内容 | 事前要件 |
 |----------|----------|----------|
 | `jaqmd collection add <path> --name <name>` | コレクションを追加 | - |
-| `jaqmd update [--pull]` | ファイルをスキャンし bigram FTS を構築 | - |
+| `jaqmd update [--pull]` | ファイルをスキャンし trigram FTS を構築 | - |
 | `jaqmd morph` | 形態素解析して形態素 FTS を構築 | SudachiPy |
 | `jaqmd embed [-f]` | ruri-v3 でチャンクをベクトル化 | fastembed |
 
@@ -92,11 +92,10 @@ jaqmd query "日本語の検索エンジンを作りたい"
 
 | コマンド | 検索方式 | 事前要件 |
 |----------|----------|----------|
-| `jaqmd bisearch <query>` | bigram BM25 | `update` 済み |
+| `jaqmd search <query>` | trigram BM25 | `update` 済み |
 | `jaqmd mosearch <query>` | 形態素 BM25 | `morph` 済み |
 | `jaqmd vsearch <query>` | ベクトル意味検索 | `embed` 済み |
 | `jaqmd query <query>` | ハイブリッド + リランク | `update` 済み（他は任意） |
-| `jaqmd search <query>` | `bisearch` のエイリアス（qmd互換） | `update` 済み |
 
 ### ドキュメント取得・管理
 
@@ -127,7 +126,7 @@ jaqmd query "日本語の検索エンジンを作りたい"
 
 ## 検索方式の使い分け
 
-- **bisearch**: 固有名詞・型番・コードなど正確なキーワードがわかっているとき。辞書不要で最速。
+- **search**: 固有名詞・型番・コードなど正確なキーワードがわかっているとき。辞書不要で最速。
 - **mosearch**: 表記ゆれを吸収したいとき、文法的なノイズを減らしたいとき。SudachiPy による正規化が効く。
 - **vsearch**: 言い換えや概念的な検索。キーワードが一致しなくても意味で引ける。
 - **query**: 品質を最優先するとき。利用可能なインデックスを自動判定して組み合わせ、ruri-reranker でリランクする。
@@ -139,7 +138,7 @@ jaqmd query "日本語の検索エンジンを作りたい"
 ```
 query "クエリ"
   ├─ Query Expansion（lex: / vec: / hyde: に展開）
-  ├─ bisearch    （常に実行）
+  ├─ search      （常に実行）
   ├─ mosearch    （morph 済みなら追加）
   ├─ vsearch     （embed 済みなら追加）
   ├─ RRF で融合
@@ -155,11 +154,11 @@ $ jaqmd status
 Collections : 2 (docs, notes)
 Documents   : 1,234
 ─────────────────────────────
-bigram FTS  : ✓ 1,234 docs    (jaqmd update)
+trigram FTS : ✓ 1,234 docs    (jaqmd update)
 morph  FTS  : ✓ 1,234 docs    (jaqmd morph)
 vectors     : ✗ not indexed   → run: jaqmd embed
 ─────────────────────────────
-Available   : bisearch, mosearch
+Available   : search, mosearch
 Unavailable : vsearch, query(full)
 ```
 
@@ -169,7 +168,7 @@ Unavailable : vsearch, query(full)
 - **ストレージ**: SQLite 単一ファイル。FTS5（全文検索）と sqlite-vec（ベクトル）を同一DB内に保持
 - **推論**: fastembed（ONNX Runtime）。PyTorch を引き込まず軽量
 - **形態素解析**: SudachiPy。表記ゆれの正規化に強い
-- **bigram**: SQLite FTS5 の trigram tokenizer を利用し、外部依存なしで実現
+- **trigram**: SQLite FTS5 の trigram tokenizer を利用し、外部依存なしで実現
 
 詳細な実装方針は [AGENTS.md](./AGENTS.md) を参照してください。
 

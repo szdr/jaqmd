@@ -1,6 +1,6 @@
 import pytest
 from jaqmd.store import add_collection, set_meta, upsert_document
-from jaqmd.search.bisearch import bisearch
+from jaqmd.search.trisearch import trisearch
 
 
 @pytest.fixture
@@ -25,14 +25,14 @@ def indexed_conn(conn, doc_dir):
         mtime=1002,
     )
     conn.commit()
-    set_meta(conn, "bigram_indexed", "1")
+    set_meta(conn, "trigram_indexed", "1")
     conn.commit()
     return conn
 
 
 def test_basic_japanese_search(indexed_conn):
     """日本語クエリで関連ドキュメントがヒットする。"""
-    results = bisearch(indexed_conn, "形態素解析")
+    results = trisearch(indexed_conn, "形態素解析")
     assert len(results) >= 1
     filepaths = [r.filepath for r in results]
     assert any("a.md" in fp for fp in filepaths)
@@ -40,26 +40,26 @@ def test_basic_japanese_search(indexed_conn):
 
 def test_no_results(indexed_conn):
     """存在しないキーワードは0件を返す。"""
-    results = bisearch(indexed_conn, "絶対に存在しないXYZ999")
+    results = trisearch(indexed_conn, "絶対に存在しないXYZ999")
     assert results == []
 
 
 def test_score_ordering(indexed_conn):
     """スコアは降順（高い方が先頭）で返る。"""
-    results = bisearch(indexed_conn, "説明します", n=10)
+    results = trisearch(indexed_conn, "説明します", n=10)
     scores = [r.score for r in results]
     assert scores == sorted(scores, reverse=True)
 
 
 def test_n_limit(indexed_conn):
     """n=1 で1件だけ返る。"""
-    results = bisearch(indexed_conn, "解説", n=1)
+    results = trisearch(indexed_conn, "解説", n=1)
     assert len(results) <= 1
 
 
 def test_all_results(indexed_conn):
     """all_results=True で件数上限なし。"""
-    results = bisearch(indexed_conn, "す", all_results=True)
+    results = trisearch(indexed_conn, "す", all_results=True)
     # 件数制限なしなので n=5 の制約はない
     assert isinstance(results, list)
 
@@ -77,7 +77,7 @@ def test_collection_filter(conn, tmp_path):
     upsert_document(conn, collection="col2", path="b.md", body="日本語処理は重要です", title="B", mtime=1001)
     conn.commit()
 
-    results = bisearch(conn, "日本語処理", collection="col1")
+    results = trisearch(conn, "日本語処理", collection="col1")
     assert all("col1/" in r.filepath for r in results)
 
 
@@ -86,25 +86,25 @@ def test_server_typo_match(indexed_conn):
 
     trigram では 'サーバ' が 'サーバー' の先頭trigram として機能する。
     """
-    results = bisearch(indexed_conn, "サーバ")
+    results = trisearch(indexed_conn, "サーバ")
     assert len(results) >= 1
     assert any("c.md" in r.filepath for r in results)
 
 
 def test_min_score_filter(indexed_conn):
     """min_score より低いスコアの結果は除外される。"""
-    all_res = bisearch(indexed_conn, "形態素解析", n=10)
+    all_res = trisearch(indexed_conn, "形態素解析", n=10)
     if not all_res:
         pytest.skip("検索結果が0件")
     max_score = max(r.score for r in all_res)
     # max_score より高い閾値を設定 → 0件になる
-    filtered = bisearch(indexed_conn, "形態素解析", n=10, min_score=max_score + 1.0)
+    filtered = trisearch(indexed_conn, "形態素解析", n=10, min_score=max_score + 1.0)
     assert filtered == []
 
 
 def test_result_fields(indexed_conn):
     """SearchResult の各フィールドが正しく設定されている。"""
-    results = bisearch(indexed_conn, "形態素解析")
+    results = trisearch(indexed_conn, "形態素解析")
     assert results
     r = results[0]
     assert r.docid

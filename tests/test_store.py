@@ -50,7 +50,7 @@ def test_soft_delete(conn, doc_dir):
 
 
 def test_soft_delete_removes_from_fts(conn, doc_dir):
-    """論理削除で bigram FTS からもエントリが削除される。"""
+    """論理削除で trigram FTS からもエントリが削除される。"""
     add_collection(conn, "test", str(doc_dir))
     upsert_document(
         conn, collection="test", path="a.md",
@@ -58,10 +58,10 @@ def test_soft_delete_removes_from_fts(conn, doc_dir):
     )
     conn.commit()
 
-    fts_before = conn.execute("SELECT COUNT(*) FROM docs_fts_bigram").fetchone()[0]
+    fts_before = conn.execute("SELECT COUNT(*) FROM docs_fts_trigram").fetchone()[0]
     soft_delete_path(conn, "test", "a.md")
     conn.commit()
-    fts_after = conn.execute("SELECT COUNT(*) FROM docs_fts_bigram").fetchone()[0]
+    fts_after = conn.execute("SELECT COUNT(*) FROM docs_fts_trigram").fetchone()[0]
 
     assert fts_before == 1
     assert fts_after == 0
@@ -81,7 +81,7 @@ def test_hash_change_updates_docid(conn, doc_dir):
     count = conn.execute("SELECT COUNT(*) FROM documents WHERE active=1").fetchone()[0]
     assert count == 1
     # FTS も 1 件
-    fts_count = conn.execute("SELECT COUNT(*) FROM docs_fts_bigram").fetchone()[0]
+    fts_count = conn.execute("SELECT COUNT(*) FROM docs_fts_trigram").fetchone()[0]
     assert fts_count == 1
 
 
@@ -98,7 +98,7 @@ def test_reactivate(conn, doc_dir):
 
     row = conn.execute("SELECT active FROM documents WHERE path='a.md'").fetchone()
     assert row["active"] == 1
-    fts_count = conn.execute("SELECT COUNT(*) FROM docs_fts_bigram").fetchone()[0]
+    fts_count = conn.execute("SELECT COUNT(*) FROM docs_fts_trigram").fetchone()[0]
     assert fts_count == 1
 
 
@@ -112,21 +112,21 @@ def test_remove_collection_cascades(conn, doc_dir):
     remove_collection(conn, "test")
 
     doc_count = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-    fts_count = conn.execute("SELECT COUNT(*) FROM docs_fts_bigram").fetchone()[0]
+    fts_count = conn.execute("SELECT COUNT(*) FROM docs_fts_trigram").fetchone()[0]
     assert doc_count == 0
     assert fts_count == 0
 
 
 def test_index_meta(conn):
     """index_meta の get/set が正しく動作する。"""
-    set_meta(conn, "bigram_indexed", "1")
+    set_meta(conn, "trigram_indexed", "1")
     conn.commit()
-    assert get_meta(conn, "bigram_indexed") == "1"
+    assert get_meta(conn, "trigram_indexed") == "1"
     assert get_meta(conn, "nonexistent") is None
 
-    set_meta(conn, "bigram_indexed", "0")
+    set_meta(conn, "trigram_indexed", "0")
     conn.commit()
-    assert get_meta(conn, "bigram_indexed") == "0"
+    assert get_meta(conn, "trigram_indexed") == "0"
 
 
 def test_list_active_paths(conn, doc_dir):

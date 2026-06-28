@@ -47,44 +47,36 @@ def test_update_with_files(tmp_cache, doc_dir):
     assert result.exit_code == 0
 
 
-def test_bisearch_without_index(tmp_cache):
-    result = runner.invoke(app, ["bisearch", "テスト"])
+def test_search_without_index(tmp_cache):
+    result = runner.invoke(app, ["search", "テスト"])
     assert result.exit_code != 0
     assert "update" in result.output
 
 
-def test_bisearch_with_results(tmp_cache, doc_dir):
+def test_search_with_results(tmp_cache, doc_dir):
     (doc_dir / "a.md").write_text("# 形態素解析\n日本語の形態素解析の詳細な解説です。")
     runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
     runner.invoke(app, ["update"])
-    result = runner.invoke(app, ["bisearch", "形態素解析"])
+    result = runner.invoke(app, ["search", "形態素解析"])
     assert result.exit_code == 0
     assert len(result.output.strip()) > 0
 
 
-def test_bisearch_no_results(tmp_cache, doc_dir):
+def test_search_no_results(tmp_cache, doc_dir):
     (doc_dir / "a.md").write_text("# テスト\n検索テスト文書です。")
     runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
     runner.invoke(app, ["update"])
-    result = runner.invoke(app, ["bisearch", "絶対存在しないXYZ999"])
+    result = runner.invoke(app, ["search", "絶対存在しないXYZ999"])
     assert result.exit_code == 0
     assert "No results" in result.output
 
 
-def test_search_alias(tmp_cache, doc_dir):
-    (doc_dir / "a.md").write_text("# 検索エンジン\n検索エンジンの仕組みと実装。")
-    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
-    runner.invoke(app, ["update"])
-    result = runner.invoke(app, ["search", "検索エンジン"])
-    assert result.exit_code == 0
-
-
-def test_bisearch_json_output(tmp_cache, doc_dir):
+def test_search_json_output(tmp_cache, doc_dir):
     import json
     (doc_dir / "a.md").write_text("# 形態素解析\n日本語処理の基礎技術について詳しく解説します。")
     runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
     runner.invoke(app, ["update"])
-    result = runner.invoke(app, ["bisearch", "形態素解析", "--json"])
+    result = runner.invoke(app, ["search", "形態素解析", "--json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert isinstance(data, list)
@@ -127,8 +119,8 @@ def test_status_command(tmp_cache, doc_dir):
     runner.invoke(app, ["update"])
     result = runner.invoke(app, ["status"])
     assert result.exit_code == 0
-    assert "bigram" in result.output.lower() or "FTS" in result.output
-    assert "bisearch" in result.output
+    assert "trigram" in result.output.lower()
+    assert "search" in result.output
 
 
 def test_cleanup_command(tmp_cache, doc_dir):
@@ -165,7 +157,7 @@ def test_vsearch_unimplemented(tmp_cache):
 def test_query_unimplemented(tmp_cache):
     result = runner.invoke(app, ["query", "テスト"])
     assert result.exit_code != 0
-    assert "bisearch" in result.output
+    assert "search" in result.output
 
 
 def test_mcp_unimplemented(tmp_cache):

@@ -50,7 +50,7 @@ def list_collections(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 def remove_collection(conn: sqlite3.Connection, name: str) -> None:
     conn.execute(
-        """DELETE FROM docs_fts_bigram WHERE docid IN (
+        """DELETE FROM docs_fts_trigram WHERE docid IN (
                SELECT docid FROM documents WHERE collection = ? AND active = 1
            )""",
         (name,),
@@ -182,15 +182,15 @@ def get_stats(conn: sqlite3.Connection) -> dict:
     total = conn.execute(
         "SELECT COUNT(*) FROM documents WHERE active = 1"
     ).fetchone()[0]
-    bigram_count = conn.execute(
-        "SELECT COUNT(*) FROM docs_fts_bigram"
+    trigram_count = conn.execute(
+        "SELECT COUNT(*) FROM docs_fts_trigram"
     ).fetchone()[0]
     collections = list_collections(conn)
     morph_indexed = get_meta(conn, "morph_indexed") == "1"
     vec_indexed = get_meta(conn, "vec_indexed") == "1"
     return {
         "total": total,
-        "bigram": bigram_count,
+        "trigram": trigram_count,
         "morph_indexed": morph_indexed,
         "vec_indexed": vec_indexed,
         "collections": collections,

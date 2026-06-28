@@ -4,7 +4,7 @@ import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .search.bisearch import SearchResult
+    from .search.trisearch import SearchResult
 
 
 def format_results(

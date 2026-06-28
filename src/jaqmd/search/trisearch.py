@@ -4,7 +4,7 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Optional
 
-from ..tokenize.bigram import to_fts_query
+from ..tokenize.trigram import to_fts_query
 
 
 @dataclass
@@ -16,7 +16,7 @@ class SearchResult:
     snippet: str
 
 
-def bisearch(
+def trisearch(
     conn: sqlite3.Connection,
     query: str,
     *,
@@ -25,12 +25,12 @@ def bisearch(
     min_score: Optional[float] = None,
     all_results: bool = False,
 ) -> list[SearchResult]:
-    """bigram BM25 検索を実行する。"""
+    """trigram BM25 検索を実行する。"""
     fts_query = to_fts_query(query)
     if not fts_query:
         return []
 
-    where_clauses = ["docs_fts_bigram MATCH ?"]
+    where_clauses = ["docs_fts_trigram MATCH ?"]
     params: list = [fts_query]
 
     if collection:
@@ -45,11 +45,11 @@ def bisearch(
             docid,
             filepath,
             title,
-            snippet(docs_fts_bigram, 3, '', '', '...', 20) AS snippet,
-            bm25(docs_fts_bigram) AS score
-        FROM docs_fts_bigram
+            snippet(docs_fts_trigram, 3, '', '', '...', 20) AS snippet,
+            bm25(docs_fts_trigram) AS score
+        FROM docs_fts_trigram
         WHERE {where_sql}
-        ORDER BY bm25(docs_fts_bigram)
+        ORDER BY bm25(docs_fts_trigram)
         {limit_sql}
     """
 

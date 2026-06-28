@@ -41,8 +41,8 @@ CREATE TABLE index_meta (
     value TEXT NOT NULL
 );
 
--- FTS: bigram（trigram tokenizer、辞書不要）
-CREATE VIRTUAL TABLE docs_fts_bigram USING fts5(
+-- FTS: trigram（trigram tokenizer、辞書不要）
+CREATE VIRTUAL TABLE docs_fts_trigram USING fts5(
     docid    UNINDEXED,
     filepath UNINDEXED,
     title,
@@ -53,7 +53,7 @@ CREATE VIRTUAL TABLE docs_fts_bigram USING fts5(
 -- INSERT 後: FTS に追加
 CREATE TRIGGER documents_ai AFTER INSERT ON documents
 WHEN NEW.active = 1 BEGIN
-    INSERT INTO docs_fts_bigram(docid, filepath, title, body)
+    INSERT INTO docs_fts_trigram(docid, filepath, title, body)
     SELECT NEW.docid,
            NEW.collection || '/' || NEW.path,
            NEW.title,
@@ -64,8 +64,8 @@ END;
 -- UPDATE: hash 変更時（active=1）→ FTS を差し替え
 CREATE TRIGGER documents_au_hash AFTER UPDATE ON documents
 WHEN NEW.active = 1 AND NEW.hash != OLD.hash BEGIN
-    DELETE FROM docs_fts_bigram WHERE docid = OLD.docid;
-    INSERT INTO docs_fts_bigram(docid, filepath, title, body)
+    DELETE FROM docs_fts_trigram WHERE docid = OLD.docid;
+    INSERT INTO docs_fts_trigram(docid, filepath, title, body)
     SELECT NEW.docid,
            NEW.collection || '/' || NEW.path,
            NEW.title,
@@ -76,7 +76,7 @@ END;
 -- UPDATE: 再活性化（active 0→1、hash 変更なし）→ FTS に追加
 CREATE TRIGGER documents_au_reactivate AFTER UPDATE ON documents
 WHEN OLD.active = 0 AND NEW.active = 1 AND NEW.hash = OLD.hash BEGIN
-    INSERT INTO docs_fts_bigram(docid, filepath, title, body)
+    INSERT INTO docs_fts_trigram(docid, filepath, title, body)
     SELECT NEW.docid,
            NEW.collection || '/' || NEW.path,
            NEW.title,
@@ -87,11 +87,11 @@ END;
 -- UPDATE: 論理削除（active 1→0）→ FTS から削除
 CREATE TRIGGER documents_soft_delete AFTER UPDATE ON documents
 WHEN OLD.active = 1 AND NEW.active = 0 BEGIN
-    DELETE FROM docs_fts_bigram WHERE docid = OLD.docid;
+    DELETE FROM docs_fts_trigram WHERE docid = OLD.docid;
 END;
 
 -- DELETE: ハード削除時も FTS から削除
 CREATE TRIGGER documents_delete AFTER DELETE ON documents
 WHEN OLD.active = 1 BEGIN
-    DELETE FROM docs_fts_bigram WHERE docid = OLD.docid;
+    DELETE FROM docs_fts_trigram WHERE docid = OLD.docid;
 END;
