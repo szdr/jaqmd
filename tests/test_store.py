@@ -1,5 +1,8 @@
+import sqlite3
+
 import pytest
 from jaqmd.store import (
+    _SCHEMA,
     add_collection,
     get_meta,
     list_active_paths,
@@ -127,6 +130,51 @@ def test_index_meta(conn):
     set_meta(conn, "trigram_indexed", "0")
     conn.commit()
     assert get_meta(conn, "trigram_indexed") == "0"
+
+
+def test_idempotent_schema_on_legacy_db(tmp_cache, monkeypatch):
+    """旧バージョンDB（trigram のみ）に再接続すると新テーブルが自動作成される。"""
+    from jaqmd.paths import db_path
+
+    # 旧スキーマ（docs_fts_trigram のみ・index_meta なし）を手動で作成
+    legacy_sql = """
+        CREATE TABLE content (hash TEXT PRIMARY KEY, body TEXT NOT NULL);
+        CREATE TABLE documents (
+            id INTEGER PRIMARY KEY, collection TEXT NOT NULL, path TEXT NOT NULL,
+            hash TEXT NOT NULL, docid TEXT UNIQUE NOT NULL, title TEXT,
+            mtime INTEGER, active INTEGER DEFAULT 1, indexed_at INTEGER DEFAULT (unixepoch())
+        );
+        CREATE VIRTUAL TABLE docs_fts_trigram USING fts5(
+            docid UNINDEXED, filepath UNINDEXED, title, body, tokenize = 'trigram'
+        );
+    """
+    db = db_path()
+    legacy_conn = sqlite3.connect(db)
+    legacy_conn.executescript(legacy_sql)
+    legacy_conn.close()
+
+    # 新しい connect() で接続 → schema.sql が冪等に適用される
+    from jaqmd.store import connect
+    conn = connect()
+
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+    assert "index_meta" in tables
+    assert "collections" in tables
+    assert "path_contexts" in tables
+
+    triggers = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='trigger'"
+    ).fetchall()}
+    assert "documents_ai" in triggers
+    assert "documents_soft_delete" in triggers
+
+    conn.close()
+
+    # 2回目の接続でもエラーにならない（冪等性）
+    conn2 = connect()
+    conn2.close()
 
 
 def test_list_active_paths(conn, doc_dir):

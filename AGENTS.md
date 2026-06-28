@@ -266,7 +266,7 @@ TextEmbedding.add_custom_model(
 
 ## 開発上の禁止事項
 
-- **DB を直接書き換えない。** スキーマ変更はマイグレーションスクリプト経由で行う
+- **DB を手書き DDL で直接書き換えない。** スキーマ変更は冪等な `schema.sql`（`CREATE ... IF NOT EXISTS` ＋ トリガーは `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER` で再生成）への追記経由で行い、接続時の初期化で自動反映する
 - **`jaqmd update` / `morph` / `embed` を自動実行しない。** ユーザーに実行コマンドを提示する
 - **PyTorch を依存に追加しない。**
 - **形態素 FTS をトリガーで同期しようとしない**（SudachiPy が呼べない）

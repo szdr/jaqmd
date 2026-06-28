@@ -20,13 +20,7 @@ def connect() -> sqlite3.Connection:
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    row = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='index_meta'"
-    ).fetchone()
-    if row is None:
-        conn.executescript(_SCHEMA.read_text())
-        conn.execute("INSERT INTO index_meta(key, value) VALUES ('schema_version', '1')")
-        conn.commit()
+    conn.executescript(_SCHEMA.read_text())
 
 
 # --- collections ---
