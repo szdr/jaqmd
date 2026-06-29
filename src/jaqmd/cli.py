@@ -10,6 +10,7 @@ from .scan import scan_collection
 from .search.trisearch import trisearch as do_trisearch
 from .search.mosearch import mosearch as do_mosearch
 from .search.vsearch import vsearch as do_vsearch
+from .search.query import query as do_query
 from .store import (
     add_collection,
     connect,
@@ -562,14 +563,28 @@ def vsearch(
 @app.command()
 def query(
     q: str = typer.Argument(..., help="検索クエリ"),
+    n: int = typer.Option(5, "-n", help="結果件数"),
+    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
+    all_results: bool = typer.Option(False, "--all", help="全件返却"),
+    full: bool = typer.Option(False, "--full", help="全文表示"),
+    json_out: bool = typer.Option(False, "--json", help="JSON 出力"),
+    md: bool = typer.Option(False, "--md", help="Markdown 出力"),
+    xml: bool = typer.Option(False, "--xml", help="XML 出力"),
+    files: bool = typer.Option(False, "--files", help="files 形式出力"),
 ) -> None:
-    """ハイブリッド検索（次イテレーション対応予定）。"""
-    typer.echo(
-        "エラー: ハイブリッド検索機能は次イテレーション対応予定です。\n"
-        "→ 現状は `jaqmd search \"<query>\"` をご利用ください。",
-        err=True,
+    """ハイブリッド検索（RRF 融合: trigram / morph / vector）。"""
+    _run_search(
+        q, n=n, collection=collection, min_score=min_score,
+        all_results=all_results, full=full, json_out=json_out,
+        md=md, xml=xml, files=files,
+        search_fn=do_query,
+        meta_key="trigram_indexed",
+        meta_missing_msg=(
+            "エラー: trigram インデックスが構築されていません。\n"
+            "→ `jaqmd update` を実行してください。"
+        ),
     )
-    raise typer.Exit(1)
 
 
 @app.command()

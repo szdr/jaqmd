@@ -127,3 +127,15 @@ CREATE TABLE IF NOT EXISTS chunk_vectors (
     UNIQUE(docid, chunk_seq)
 );
 CREATE INDEX IF NOT EXISTS idx_chunk_vectors_docid ON chunk_vectors(docid);
+
+-- Query Expansion キャッシュ（枠のみ、QE 本体は jaqmd-qe で実装予定）
+CREATE TABLE IF NOT EXISTS qe_cache (
+    query_hash TEXT PRIMARY KEY,
+    query_raw  TEXT NOT NULL,
+    lex_query  TEXT,
+    vec_query  TEXT,
+    hyde_text  TEXT,
+    model_id   TEXT NOT NULL,
+    created_at INTEGER DEFAULT (unixepoch()),
+    ttl        INTEGER DEFAULT 86400
+);

@@ -217,16 +217,49 @@ def test_status_shows_morph_indexed(tmp_cache, doc_dir):
     assert "✓" in result.output
 
 
+def test_query_without_trigram_index(tmp_cache):
+    """trigram インデックスなしでは query が失敗し update を案内する。"""
+    result = runner.invoke(app, ["query", "テスト"])
+    assert result.exit_code != 0
+    assert "update" in result.output
+
+
+def test_query_with_trigram_only(tmp_cache, doc_dir):
+    """update 後（trigram のみ）に query が成功する（RRF degrade 動作）。"""
+    (doc_dir / "a.md").write_text("# 形態素解析\n日本語の形態素解析の詳細な解説です。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    result = runner.invoke(app, ["query", "形態素解析"])
+    assert result.exit_code == 0
+    assert len(result.output.strip()) > 0
+
+
+def test_query_no_results(tmp_cache, doc_dir):
+    """ヒットしないクエリは 'No results' を出力して exit 0。"""
+    (doc_dir / "a.md").write_text("# テスト\n検索テスト文書です。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    result = runner.invoke(app, ["query", "絶対存在しないXYZ999"])
+    assert result.exit_code == 0
+    assert "No results" in result.output
+
+
+def test_query_json_output(tmp_cache, doc_dir):
+    """--json で有効な JSON が返る。"""
+    import json
+    (doc_dir / "a.md").write_text("# 形態素解析\n日本語処理の基礎技術について詳しく解説します。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    result = runner.invoke(app, ["query", "形態素解析", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert isinstance(data, list)
+
+
 def test_vsearch_unimplemented(tmp_cache):
     result = runner.invoke(app, ["vsearch", "テスト"])
     assert result.exit_code != 0
     assert "embed" in result.output
-
-
-def test_query_unimplemented(tmp_cache):
-    result = runner.invoke(app, ["query", "テスト"])
-    assert result.exit_code != 0
-    assert "search" in result.output
 
 
 def test_mcp_unimplemented(tmp_cache):

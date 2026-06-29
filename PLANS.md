@@ -105,23 +105,25 @@ ONNX 不要・追加依存は `sudachipy` + `sudachidict-core`（`pyproject.toml
 
 ---
 
-## Phase C: ハイブリッド検索（query）
+## Phase C: ハイブリッド検索（query）✅ 完了（RRF最小完結）
 
-### 作業単位 C-1: RRF 融合 + query ロジック
-- `src/jaqmd/search/query.py` を新設。AGENTS.md「query」パイプライン: 利用可能インデックス（`index_meta` 判定）で search / mosearch / vsearch を実行 → **RRF（k=60）でランク融合** → 上位候補を返す。morph/vec 未構築でも search のみで動作する degradation を担保。
-- 既存の `trisearch` / `mosearch` / `vsearch` を呼び出して結果を集約（再実装しない）。
+### 作業単位 C-1: RRF 融合 + query ロジック ✅
+- `src/jaqmd/search/query.py` 実装済み。`_rrf_fuse(k=60)` で trigram/morph/vec の結果を融合。`get_meta` で利用可能インデックスを動的判定し、morph/vec 未構築でも trigram 単独で degrade 動作する。
+- 既存の `trisearch` / `mosearch` / `vsearch` を呼び出して集約（再実装なし）。
 
-### 作業単位 C-2: ruri-reranker ラッパー
-- `src/jaqmd/rerank.py` を新設。`cl-nagoya/ruri-v3-reranker-310m`。AGENTS.md 注記: reranker の ONNX 版が公式に無ければ optimum でエクスポート（別スクリプト/`jaqmd-qe` 管理）。ONNX 入手手段の確定がこの作業単位のリスク要因——着手時に要確認。
-- reranker 未利用時は RRF 結果をそのまま返すフォールバックを用意。
+### 作業単位 C-2: ruri-reranker ラッパー（恒等フォールバックのみ実装）
+- `src/jaqmd/rerank.py` 実装済み（恒等フォールバック）。ruri-v3-reranker-310m の ONNX 統合は**別タスクに切り出し・未着手**（ONNX入手手段の確定が必要）。後で実モデルを差し込める差し替えポイントとして機能する。
 
-### 作業単位 C-3: Query Expansion（最小実装 + キャッシュ）
-- `schema.sql` に `qe_cache` テーブルを追記（`CREATE TABLE IF NOT EXISTS`）。接続時に自動作成される。
-- QE 本体は別リポジトリ `jaqmd-qe` 想定（Qwen 禁止・独自開発）。本フェーズでは**QE なし（raw クエリをそのまま使う）でも query が成立する**最小実装に留め、`qe_cache` 配線は枠だけ用意。フル QE は別タスクに切り出す。
+### 作業単位 C-3: Query Expansion（枠のみ実装）
+- `schema.sql` に `qe_cache` テーブルを追記済み（`CREATE TABLE IF NOT EXISTS`）。接続時に自動作成される。QE ロジック本体は**別タスク（`jaqmd-qe` リポジトリ）・未着手**。現状は raw クエリをそのまま使用。
 
-### 作業単位 C-4: `jaqmd query` CLI + テスト
-- `cli.py:408-418` のスタブを置換。出力は既存 `format.py` 再利用。
-- テスト: 各インデックス構築状態の組み合わせで適切に degrade すること、RRF 順位の妥当性。
+### 作業単位 C-4: `jaqmd query` CLI + テスト ✅
+- `cli.py` のスタブを置換済み。`mosearch`/`vsearch` と同一の10オプション（`-n/-c/--min-score/--all/--full/--json/--md/--xml/--files`）を備え、`_run_search(search_fn=do_query)` に集約。
+- `tests/test_query.py` 新設（`_rrf_fuse` ユニットテスト6件 + query 統合テスト11件）、`tests/test_cli.py` に query テスト4件追加。全134テスト緑。
+
+### 残タスク（別イテレーション）
+- C-2 本実装: ruri-v3-reranker-310m の ONNX 入手（optimum エクスポート）と `rerank.py` への統合
+- C-3 本実装: `jaqmd-qe` による Query Expansion ロジックと `qe_cache` 配線
 
 ---
 
