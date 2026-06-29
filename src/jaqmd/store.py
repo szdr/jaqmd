@@ -16,11 +16,39 @@ def connect() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     _ensure_schema(conn)
+    _load_vec(conn)  # 失敗しても握りつぶす（trigram/morph は動作継続）
     return conn
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA.read_text())
+
+
+def _load_vec(conn: sqlite3.Connection) -> bool:
+    """sqlite-vec 拡張をロードし、vectors_vec テーブルを作成する。
+    拡張が利用できない環境ではサイレントに失敗して False を返す。
+    """
+    try:
+        import sqlite_vec
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS vectors_vec "
+            "USING vec0(chunk_id INTEGER PRIMARY KEY, embedding float[768])"
+        )
+        return True
+    except Exception:
+        return False
+
+
+def vec_available(conn: sqlite3.Connection) -> bool:
+    """vectors_vec テーブルが利用可能かどうかを確認する。"""
+    try:
+        conn.execute("SELECT 1 FROM vectors_vec LIMIT 0")
+        return True
+    except Exception:
+        return False
 
 
 # --- collections ---

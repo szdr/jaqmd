@@ -9,6 +9,7 @@ from .format import format_results
 from .scan import scan_collection
 from .search.trisearch import trisearch as do_trisearch
 from .search.mosearch import mosearch as do_mosearch
+from .search.vsearch import vsearch as do_vsearch
 from .store import (
     add_collection,
     connect,
@@ -410,14 +411,98 @@ def morph() -> None:
 
 
 @app.command()
-def embed() -> None:
-    """ベクトルインデックスを構築します（次イテレーション対応予定）。"""
-    typer.echo(
-        "エラー: ベクトルインデックス機能は未実装です（次イテレーション対応予定）。\n"
-        "→ 現状は `jaqmd search \"<query>\"` をご利用ください。",
-        err=True,
-    )
-    raise typer.Exit(1)
+def embed(
+    force: bool = typer.Option(False, "-f", "--force", help="既存ベクトルを削除して全再構築"),
+) -> None:
+    """ベクトルインデックスを構築します。"""
+    try:
+        from .chunk import chunk_document
+        from .embed import EMBED_DIM, EMBED_MODEL, count_tokens, embed_documents
+    except ImportError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+
+    conn = connect()
+
+    from .store import vec_available
+    if not vec_available(conn):
+        typer.echo(
+            "エラー: sqlite-vec 拡張をロードできません。\n"
+            "→ `pip install sqlite-vec` またはビルド環境を確認してください。",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    if get_meta(conn, "trigram_indexed") != "1":
+        typer.echo(
+            "エラー: trigram インデックスが構築されていません。\n"
+            "→ 先に `jaqmd update` を実行してください。",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    if force:
+        typer.echo("既存ベクトルを削除して全再構築します...")
+        conn.execute("DELETE FROM vectors_vec")
+        conn.execute("DELETE FROM chunk_vectors")
+        conn.commit()
+
+    # 差分: chunk_vectors に未登録の active ドキュメントのみ処理
+    if force:
+        rows = conn.execute(
+            """SELECT d.id, d.docid, d.collection, d.path, c.body
+               FROM documents d JOIN content c ON d.hash = c.hash
+               WHERE d.active = 1"""
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT d.id, d.docid, d.collection, d.path, c.body
+               FROM documents d JOIN content c ON d.hash = c.hash
+               LEFT JOIN chunk_vectors cv ON cv.docid = d.docid
+               WHERE d.active = 1 AND cv.docid IS NULL"""
+        ).fetchall()
+
+    if not rows:
+        typer.echo("新しくベクトル化するドキュメントはありません。")
+        set_meta(conn, "vec_indexed", "1")
+        set_meta(conn, "embed_model", EMBED_MODEL)
+        set_meta(conn, "embed_dim", str(EMBED_DIM))
+        conn.commit()
+        return
+
+    typer.echo(f"ベクトルインデックスを構築中... ({len(rows)} 件)")
+
+    import sqlite_vec
+
+    for doc in rows:
+        body = doc["body"] or ""
+        chunks = chunk_document(body, count_tokens=count_tokens)
+        if not chunks:
+            continue
+
+        chunk_texts = [ct for _, _, ct in chunks]
+        vectors = embed_documents(chunk_texts)
+
+        for (chunk_seq, chunk_pos, chunk_text), vec in zip(chunks, vectors):
+            cur = conn.execute(
+                """INSERT INTO chunk_vectors(doc_id, docid, chunk_seq, chunk_pos, chunk_text, embed_model)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (doc["id"], doc["docid"], chunk_seq, chunk_pos, chunk_text, EMBED_MODEL),
+            )
+            chunk_id = cur.lastrowid
+            conn.execute(
+                "INSERT INTO vectors_vec(chunk_id, embedding) VALUES (?, ?)",
+                (chunk_id, sqlite_vec.serialize_float32(vec)),
+            )
+
+        typer.echo(f"  {doc['collection']}/{doc['path']} ({len(chunks)} チャンク)")
+
+    set_meta(conn, "vec_indexed", "1")
+    set_meta(conn, "embed_model", EMBED_MODEL)
+    set_meta(conn, "embed_dim", str(EMBED_DIM))
+    conn.commit()
+
+    typer.echo(f"完了: {len(rows)} 件のドキュメントをベクトル化しました。")
 
 
 @app.command()
@@ -450,14 +535,28 @@ def mosearch(
 @app.command()
 def vsearch(
     query: str = typer.Argument(..., help="検索クエリ"),
+    n: int = typer.Option(5, "-n", help="結果件数"),
+    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
+    all_results: bool = typer.Option(False, "--all", help="全件返却"),
+    full: bool = typer.Option(False, "--full", help="全文表示"),
+    json_out: bool = typer.Option(False, "--json", help="JSON 出力"),
+    md: bool = typer.Option(False, "--md", help="Markdown 出力"),
+    xml: bool = typer.Option(False, "--xml", help="XML 出力"),
+    files: bool = typer.Option(False, "--files", help="files 形式出力"),
 ) -> None:
-    """ベクトル意味検索（次イテレーション対応予定）。"""
-    typer.echo(
-        "エラー: ベクトルインデックスがありません（次イテレーション対応予定）。\n"
-        "→ `jaqmd embed` を実行してから再試行してください。",
-        err=True,
+    """ベクトル意味検索を実行します。"""
+    _run_search(
+        query, n=n, collection=collection, min_score=min_score,
+        all_results=all_results, full=full, json_out=json_out,
+        md=md, xml=xml, files=files,
+        search_fn=do_vsearch,
+        meta_key="vec_indexed",
+        meta_missing_msg=(
+            "エラー: ベクトルインデックスが構築されていません。\n"
+            "→ `jaqmd embed` を実行してください。"
+        ),
     )
-    raise typer.Exit(1)
 
 
 @app.command()

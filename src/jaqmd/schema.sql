@@ -113,3 +113,17 @@ WHEN OLD.active = 1 BEGIN
     DELETE FROM docs_fts_trigram WHERE docid = OLD.docid;
     DELETE FROM docs_fts_morph WHERE docid = OLD.docid;
 END;
+
+-- チャンク本体（ベクトル検索用）
+-- vectors_vec（vec0）は sqlite-vec 拡張ロード後に store.py で別途作成する。
+CREATE TABLE IF NOT EXISTS chunk_vectors (
+    id          INTEGER PRIMARY KEY,
+    doc_id      INTEGER NOT NULL REFERENCES documents(id),
+    docid       TEXT NOT NULL,
+    chunk_seq   INTEGER NOT NULL,
+    chunk_pos   INTEGER NOT NULL,
+    chunk_text  TEXT NOT NULL,
+    embed_model TEXT NOT NULL,
+    UNIQUE(docid, chunk_seq)
+);
+CREATE INDEX IF NOT EXISTS idx_chunk_vectors_docid ON chunk_vectors(docid);

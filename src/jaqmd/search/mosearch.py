@@ -3,8 +3,8 @@ from __future__ import annotations
 import sqlite3
 from typing import Optional
 
-from ..snippet import make_snippet
 from ..tokenize.morph import snippet_terms, to_fts_query
+from .snippet import extract_snippet
 from .trisearch import SearchResult
 
 
@@ -63,7 +63,7 @@ def mosearch(
                 score=score,
                 filepath=row["filepath"],
                 title=row["title"] or "",
-                snippet=make_snippet(body, terms, width=160),
+                snippet=extract_snippet(body, terms, max_chars=160),
                 body=body,
             )
         )

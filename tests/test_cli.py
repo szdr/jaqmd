@@ -160,10 +160,11 @@ def test_morph_is_idempotent(tmp_cache, doc_dir):
     assert result.exit_code == 0
 
 
-def test_embed_unimplemented(tmp_cache):
+def test_embed_requires_trigram_index(tmp_cache):
+    """trigram インデックスなしでは embed が失敗し update を案内する。"""
     result = runner.invoke(app, ["embed"])
     assert result.exit_code != 0
-    assert "未実装" in result.output
+    assert "update" in result.output
 
 
 def test_mosearch_without_morph_index(tmp_cache, doc_dir):

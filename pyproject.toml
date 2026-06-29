@@ -29,6 +29,10 @@ packages = ["src/jaqmd"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "integration: 重い統合テスト（モデルのダウンロードが必要）",
+]
+addopts = "-m 'not integration'"
 
 [dependency-groups]
 dev = [
