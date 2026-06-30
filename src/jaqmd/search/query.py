@@ -12,6 +12,32 @@ from ..rerank import rerank
 RRF_K = 60
 
 
+def _minmax_scale(results: list[SearchResult]) -> list[SearchResult]:
+    """RRF スコアを min-max スケーリングで 0-1 に正規化する。
+
+    融合済み全候補の min/max を使って正規化するため、
+    最も関連度が高い結果が 1.0、最も低い結果が 0.0 になる。
+
+    Args:
+        results: RRF 融合済みの SearchResult リスト（スコア降順）。
+
+    Returns:
+        score を 0-1 に正規化した SearchResult リスト（並び順は維持）。
+    """
+    if not results:
+        return results
+    scores = [r.score for r in results]
+    lo, hi = min(scores), max(scores)
+    if hi == lo:
+        # 全件同スコア（1件のみ含む）はゼロ除算を避けて全件 1.0
+        return [dataclasses.replace(r, score=1.0) for r in results]
+    span = hi - lo
+    return [
+        dataclasses.replace(r, score=(r.score - lo) / span)
+        for r in results
+    ]
+
+
 def _rrf_fuse(result_lists: list[list[SearchResult]], k: int = RRF_K) -> list[SearchResult]:
     """Reciprocal Rank Fusion で複数の検索結果リストを融合する。
 
@@ -99,8 +125,9 @@ def query(
         result_lists.append(vs_results)
 
     fused = _rrf_fuse(result_lists, k=RRF_K)
+    fused = _minmax_scale(fused)
 
-    # min_score 足切り（all_results の有無に関わらず適用）
+    # min_score 足切り（0-1 正規化後のスコアと比較、all_results の有無に関わらず適用）
     if min_score is not None:
         fused = [r for r in fused if r.score >= min_score]
 
