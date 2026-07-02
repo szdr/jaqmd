@@ -6,7 +6,7 @@ from typing import Optional
 
 from .trisearch import SearchResult, trisearch
 from ..store import get_meta
-from ..rerank import rerank
+from ..rerank import rerank, RERANK_TOP_K
 
 # AGENTS.md 準拠: RRF パラメータ k=60
 RRF_K = 60
@@ -78,6 +78,7 @@ def query(
     collection: Optional[str] = None,
     min_score: Optional[float] = None,
     all_results: bool = False,
+    rerank_enabled: bool = True,
 ) -> list[SearchResult]:
     """ハイブリッド検索: RRF 融合による trigram / morph / vector 統合検索。
 
@@ -91,6 +92,7 @@ def query(
         collection: コレクション名での絞り込み（None で全コレクション）。
         min_score: RRF スコアの最小閾値（None で足切りなし）。
         all_results: True なら全件返却（n・min_score は適用しない）。
+        rerank_enabled: False なら reranker を無効化（RRF 順のまま）。
 
     Returns:
         RRF 融合 + rerank 後の SearchResult リスト（スコア降順）。
@@ -125,6 +127,11 @@ def query(
         result_lists.append(vs_results)
 
     fused = _rrf_fuse(result_lists, k=RRF_K)
+
+    # reranker（融合プール全体に適用してから n 制限する。--all 時は全件を再スコア）
+    top_k = None if all_results else RERANK_TOP_K
+    fused = rerank(query_text, fused, enabled=rerank_enabled, top_k=top_k)
+
     fused = _minmax_scale(fused)
 
     # min_score 足切り（0-1 正規化後のスコアと比較、all_results の有無に関わらず適用）
@@ -135,5 +142,4 @@ def query(
     if not all_results:
         fused = fused[:n]
 
-    # reranker（現状は恒等フォールバック。将来の差し替えポイント）
-    return rerank(query_text, fused)
+    return fused

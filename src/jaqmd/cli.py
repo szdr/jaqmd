@@ -159,6 +159,7 @@ def _run_search(
         "エラー: trigram インデックスが構築されていません。\n"
         "→ `jaqmd update` を実行してください。"
     ),
+    search_kwargs: Optional[dict] = None,
 ) -> None:
     conn = connect()
     if get_meta(conn, meta_key) != "1":
@@ -169,6 +170,7 @@ def _run_search(
     results = fn(
         conn, query, n=n, collection=collection,
         min_score=min_score, all_results=all_results,
+        **(search_kwargs or {}),
     )
 
     fmt = "default"
@@ -572,6 +574,7 @@ def query(
     md: bool = typer.Option(False, "--md", help="Markdown 出力"),
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
+    no_rerank: bool = typer.Option(False, "--no-rerank", help="reranker を無効化"),
 ) -> None:
     """ハイブリッド検索（RRF 融合: trigram / morph / vector）。"""
     _run_search(
@@ -584,6 +587,7 @@ def query(
             "エラー: trigram インデックスが構築されていません。\n"
             "→ `jaqmd update` を実行してください。"
         ),
+        search_kwargs={"rerank_enabled": not no_rerank},
     )
 
 

@@ -122,6 +122,7 @@ jaqmd query "日本語の検索エンジンを作りたい"
 --md              Markdown 形式で出力
 --xml             XML 形式で出力
 --files           docid,score,filepath,context 形式で出力
+--no-rerank       （query のみ）ruri-reranker を無効化し RRF 順のまま返す
 ```
 
 ## 検索方式の使い分け
@@ -160,6 +161,24 @@ vectors     : ✗ not indexed   → run: jaqmd embed
 ─────────────────────────────
 Available   : search, mosearch
 Unavailable : vsearch, query(full)
+```
+
+## トラブルシューティング
+
+### reranker 実行時に `ValueError: setting an array element with a sequence` が出る
+
+`jaqmd query` の reranker 段（`src/jaqmd/rerank.py`）で以下のような例外が出る場合、
+reranker モデルのキャッシュが古い（修正前の `tokenizer.json` を含む）可能性があります。
+
+```
+ValueError: setting an array element with a sequence.
+The requested array has an inhomogeneous shape after 1 dimensions.
+```
+
+キャッシュを削除して最新のモデルを再取得してください（次回 `jaqmd query` 実行時に自動DLされます）。
+
+```bash
+rm -rf ~/.cache/jaqmd/models/models--szdr--ruri-v3-reranker-310m-onnx
 ```
 
 ## 設計上の選択

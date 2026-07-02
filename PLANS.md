@@ -111,8 +111,8 @@ ONNX 不要・追加依存は `sudachipy` + `sudachidict-core`（`pyproject.toml
 - `src/jaqmd/search/query.py` 実装済み。`_rrf_fuse(k=60)` で trigram/morph/vec の結果を融合。`get_meta` で利用可能インデックスを動的判定し、morph/vec 未構築でも trigram 単独で degrade 動作する。
 - 既存の `trisearch` / `mosearch` / `vsearch` を呼び出して集約（再実装なし）。
 
-### 作業単位 C-2: ruri-reranker ラッパー（恒等フォールバックのみ実装）
-- `src/jaqmd/rerank.py` 実装済み（恒等フォールバック）。ruri-v3-reranker-310m の ONNX 統合は**別タスクに切り出し・未着手**（ONNX入手手段の確定が必要）。後で実モデルを差し込める差し替えポイントとして機能する。
+### 作業単位 C-2: ruri-reranker ラッパー ✅ 本実装完了
+- `src/jaqmd/rerank.py`: fastembed `TextCrossEncoder` + カスタムモデル登録（`szdr/ruri-v3-reranker-310m-onnx`）で ruri-v3-reranker-310m を統合。`query()` は RRF 融合プール全体（`--all` 以外は上位 `RERANK_TOP_K=50`）に対して cross-encoder でリスコアしてから n 制限する。fastembed 未導入・モデルロード失敗時は恒等フォールバックで degrade。`jaqmd query --no-rerank` で明示的に無効化可能。
 
 ### 作業単位 C-3: Query Expansion（枠のみ実装）
 - `schema.sql` に `qe_cache` テーブルを追記済み（`CREATE TABLE IF NOT EXISTS`）。接続時に自動作成される。QE ロジック本体は**別タスク（`jaqmd-qe` リポジトリ）・未着手**。現状は raw クエリをそのまま使用。
@@ -122,7 +122,6 @@ ONNX 不要・追加依存は `sudachipy` + `sudachidict-core`（`pyproject.toml
 - `tests/test_query.py` 新設（`_rrf_fuse` ユニットテスト6件 + query 統合テスト11件）、`tests/test_cli.py` に query テスト4件追加。全134テスト緑。
 
 ### 残タスク（別イテレーション）
-- C-2 本実装: ruri-v3-reranker-310m の ONNX 入手（optimum エクスポート）と `rerank.py` への統合
 - C-3 本実装: `jaqmd-qe` による Query Expansion ロジックと `qe_cache` 配線
 
 ---
