@@ -7,6 +7,7 @@ from typing import Optional
 from .trisearch import SearchResult, trisearch
 from ..store import get_meta
 from ..rerank import rerank, RERANK_TOP_K
+from ..progress import NULL_REPORTER, ProgressReporter
 
 # AGENTS.md 準拠: RRF パラメータ k=60
 RRF_K = 60
@@ -79,6 +80,7 @@ def query(
     min_score: Optional[float] = None,
     all_results: bool = False,
     rerank_enabled: bool = True,
+    reporter: Optional[ProgressReporter] = None,
 ) -> list[SearchResult]:
     """ハイブリッド検索: RRF 融合による trigram / morph / vector 統合検索。
 
@@ -93,10 +95,12 @@ def query(
         min_score: RRF スコアの最小閾値（None で足切りなし）。
         all_results: True なら全件返却（n・min_score は適用しない）。
         rerank_enabled: False なら reranker を無効化（RRF 順のまま）。
+        reporter: 進捗表示用の ProgressReporter（None なら無効）。
 
     Returns:
         RRF 融合 + rerank 後の SearchResult リスト（スコア降順）。
     """
+    reporter = reporter or NULL_REPORTER
     candidate_n = max(n * 5, 20)
 
     result_lists: list[list[SearchResult]] = []
@@ -105,6 +109,7 @@ def query(
     tri_results = trisearch(
         conn, query_text,
         n=candidate_n, collection=collection, all_results=True,
+        reporter=reporter,
     )
     result_lists.append(tri_results)
 
@@ -114,6 +119,7 @@ def query(
         mo_results = mosearch(
             conn, query_text,
             n=candidate_n, collection=collection, all_results=True,
+            reporter=reporter,
         )
         result_lists.append(mo_results)
 
@@ -123,6 +129,7 @@ def query(
         vs_results = vsearch(
             conn, query_text,
             n=candidate_n, collection=collection, all_results=True,
+            reporter=reporter,
         )
         result_lists.append(vs_results)
 
@@ -130,7 +137,7 @@ def query(
 
     # reranker（融合プール全体に適用してから n 制限する。--all 時は全件を再スコア）
     top_k = None if all_results else RERANK_TOP_K
-    fused = rerank(query_text, fused, enabled=rerank_enabled, top_k=top_k)
+    fused = rerank(query_text, fused, enabled=rerank_enabled, top_k=top_k, reporter=reporter)
 
     fused = _minmax_scale(fused)
 

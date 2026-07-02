@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Optional
 
+from ..progress import NULL_REPORTER, ProgressReporter
 from .snippet import extract_snippet
 from .trisearch import SearchResult
 
@@ -15,11 +16,13 @@ def vsearch(
     collection: Optional[str] = None,
     min_score: Optional[float] = None,
     all_results: bool = False,
+    reporter: Optional[ProgressReporter] = None,
 ) -> list[SearchResult]:
     """ベクトル KNN 検索を実行する。ドキュメント単位（最良チャンク）で結果を返す。
 
     score は cosine 類似度近似値（高いほど良い）。
     """
+    reporter = reporter or NULL_REPORTER
     if not query.strip():
         return []
 
@@ -41,16 +44,18 @@ def vsearch(
             "sqlite-vec 拡張のロードに失敗している可能性があります。"
         ) from e
 
-    vec = embed_query(query)
+    with reporter.step("クエリをベクトル化"):
+        vec = embed_query(query)
     vec_bytes = sqlite_vec.serialize_float32(vec)
 
     # 集約前に多めに取得（collection フィルタ後に n 件確保するため）
     k = 500 if all_results else max(n * 5, 50)
 
-    knn_rows = conn.execute(
-        "SELECT chunk_id, distance FROM vectors_vec WHERE embedding MATCH ? AND k = ? ORDER BY distance",
-        (vec_bytes, k),
-    ).fetchall()
+    with reporter.step("ベクトル検索"):
+        knn_rows = conn.execute(
+            "SELECT chunk_id, distance FROM vectors_vec WHERE embedding MATCH ? AND k = ? ORDER BY distance",
+            (vec_bytes, k),
+        ).fetchall()
 
     if not knn_rows:
         return []

@@ -4,6 +4,7 @@ import sqlite3
 from typing import Optional
 
 from ..tokenize.morph import snippet_terms, to_fts_query
+from ..progress import NULL_REPORTER, ProgressReporter
 from .snippet import extract_snippet
 from .trisearch import SearchResult
 
@@ -16,8 +17,10 @@ def mosearch(
     collection: Optional[str] = None,
     min_score: Optional[float] = None,
     all_results: bool = False,
+    reporter: Optional[ProgressReporter] = None,
 ) -> list[SearchResult]:
     """形態素 BM25 検索を実行する。スニペットは原文ベースで生成する。"""
+    reporter = reporter or NULL_REPORTER
     fts_query = to_fts_query(query)
     if not fts_query:
         return []
@@ -50,7 +53,8 @@ def mosearch(
     """
 
     terms = snippet_terms(query)
-    rows = conn.execute(sql, params).fetchall()
+    with reporter.step("形態素検索"):
+        rows = conn.execute(sql, params).fetchall()
     results = []
     for row in rows:
         score = -float(row["score"])

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Optional
 
 import typer
 
 from .format import format_results
+from .progress import ProgressReporter
 from .scan import scan_collection
 from .search.trisearch import trisearch as do_trisearch
 from .search.mosearch import mosearch as do_mosearch
@@ -153,6 +155,7 @@ def _run_search(
     md: bool,
     xml: bool,
     files: bool,
+    quiet: bool = False,
     search_fn=None,
     meta_key: str = "trigram_indexed",
     meta_missing_msg: str = (
@@ -166,10 +169,13 @@ def _run_search(
         typer.echo(meta_missing_msg, err=True)
         raise typer.Exit(1)
 
+    reporter = ProgressReporter(enabled=sys.stderr.isatty() and not quiet)
+
     fn = search_fn or do_trisearch
     results = fn(
         conn, query, n=n, collection=collection,
         min_score=min_score, all_results=all_results,
+        reporter=reporter,
         **(search_kwargs or {}),
     )
 
@@ -202,12 +208,13 @@ def search_command(
     md: bool = typer.Option(False, "--md", help="Markdown 出力"),
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
 ) -> None:
     """trigram BM25 検索を実行します。"""
     _run_search(
         query, n=n, collection=collection, min_score=min_score,
         all_results=all_results, full=full, json_out=json_out,
-        md=md, xml=xml, files=files,
+        md=md, xml=xml, files=files, quiet=quiet,
     )
 
 
@@ -520,12 +527,13 @@ def mosearch(
     md: bool = typer.Option(False, "--md", help="Markdown 出力"),
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
 ) -> None:
     """形態素 BM25 検索を実行します。"""
     _run_search(
         query, n=n, collection=collection, min_score=min_score,
         all_results=all_results, full=full, json_out=json_out,
-        md=md, xml=xml, files=files,
+        md=md, xml=xml, files=files, quiet=quiet,
         search_fn=do_mosearch,
         meta_key="morph_indexed",
         meta_missing_msg=(
@@ -547,12 +555,13 @@ def vsearch(
     md: bool = typer.Option(False, "--md", help="Markdown 出力"),
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
 ) -> None:
     """ベクトル意味検索を実行します。"""
     _run_search(
         query, n=n, collection=collection, min_score=min_score,
         all_results=all_results, full=full, json_out=json_out,
-        md=md, xml=xml, files=files,
+        md=md, xml=xml, files=files, quiet=quiet,
         search_fn=do_vsearch,
         meta_key="vec_indexed",
         meta_missing_msg=(
@@ -575,12 +584,13 @@ def query(
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
     no_rerank: bool = typer.Option(False, "--no-rerank", help="reranker を無効化"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
 ) -> None:
     """ハイブリッド検索（RRF 融合: trigram / morph / vector）。"""
     _run_search(
         q, n=n, collection=collection, min_score=min_score,
         all_results=all_results, full=full, json_out=json_out,
-        md=md, xml=xml, files=files,
+        md=md, xml=xml, files=files, quiet=quiet,
         search_fn=do_query,
         meta_key="trigram_indexed",
         meta_missing_msg=(

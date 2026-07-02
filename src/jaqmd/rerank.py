@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
+from .progress import NULL_REPORTER, ProgressReporter
+
 if TYPE_CHECKING:
     from .search.trisearch import SearchResult
 
@@ -71,6 +73,7 @@ def rerank(
     enabled: bool = True,
     top_k: Optional[int] = RERANK_TOP_K,
     n: Optional[int] = None,
+    reporter: Optional[ProgressReporter] = None,
 ) -> list["SearchResult"]:
     """結果を ruri-v3-reranker（cross-encoder）でリランクして返す。
 
@@ -83,10 +86,12 @@ def rerank(
         enabled: False なら reranker を使わず恒等フォールバック。
         top_k: 再スコア対象を先頭 top_k 件に限定する。None なら全件。
         n: 上位 n 件に絞る場合は指定する。None なら全件返却。
+        reporter: 進捗表示用の ProgressReporter（None なら無効）。
 
     Returns:
         リランク済み（無効時は入力順）の SearchResult リスト。
     """
+    reporter = reporter or NULL_REPORTER
     if not results or not enabled:
         return results if n is None else results[:n]
 
@@ -99,7 +104,8 @@ def rerank(
     else:
         head, tail = results[:top_k], results[top_k:]
 
-    scores = list(encoder.rerank(query, [_doc_text(r) for r in head]))
+    with reporter.step(f"リランク ({len(head)} 件)"):
+        scores = list(encoder.rerank(query, [_doc_text(r) for r in head]))
     rescored = [
         dataclasses.replace(r, score=float(s))
         for r, s in zip(head, scores)

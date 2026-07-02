@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ..tokenize.trigram import to_fts_query
+from ..progress import NULL_REPORTER, ProgressReporter
 
 
 @dataclass
@@ -25,8 +26,10 @@ def trisearch(
     collection: Optional[str] = None,
     min_score: Optional[float] = None,
     all_results: bool = False,
+    reporter: Optional[ProgressReporter] = None,
 ) -> list[SearchResult]:
     """trigram BM25 検索を実行する。"""
+    reporter = reporter or NULL_REPORTER
     fts_query = to_fts_query(query)
     if not fts_query:
         return []
@@ -55,7 +58,8 @@ def trisearch(
         {limit_sql}
     """
 
-    rows = conn.execute(sql, params).fetchall()
+    with reporter.step("trigram 検索"):
+        rows = conn.execute(sql, params).fetchall()
     results = []
     for row in rows:
         score = -float(row["score"])  # bm25() は負値（小さいほど良い）を返す
