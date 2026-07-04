@@ -91,8 +91,10 @@ def collection_remove(
 def update(
     pull: bool = typer.Option(False, "--pull", help="（予約）"),
     collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
 ) -> None:
     """ファイルをスキャンして trigram FTS インデックスを構築します。"""
+    reporter = ProgressReporter(enabled=sys.stderr.isatty() and not quiet)
     conn = connect()
     if collection:
         col = get_collection(conn, collection)
@@ -124,17 +126,19 @@ def update(
         existing_paths = list_active_paths(conn, name)
         scanned_paths: set[str] = set()
 
-        for f in scan_collection(col_path, glob_mask):
-            upsert_document(
-                conn,
-                collection=name,
-                path=f["path"],
-                body=f["body"],
-                title=f["title"],
-                mtime=f["mtime"],
-            )
-            scanned_paths.add(f["path"])
-            total_added += 1
+        with reporter.track(f"スキャン: {name}") as advance:
+            for f in scan_collection(col_path, glob_mask):
+                upsert_document(
+                    conn,
+                    collection=name,
+                    path=f["path"],
+                    body=f["body"],
+                    title=f["title"],
+                    mtime=f["mtime"],
+                )
+                scanned_paths.add(f["path"])
+                total_added += 1
+                advance()
 
         for gone in existing_paths - scanned_paths:
             soft_delete_path(conn, name, gone)
@@ -383,6 +387,7 @@ def cleanup() -> None:
 @app.command()
 def morph(
     collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
 ) -> None:
     """形態素解析インデックスを構築します。"""
     try:
@@ -391,6 +396,7 @@ def morph(
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
 
+    reporter = ProgressReporter(enabled=sys.stderr.isatty() and not quiet)
     conn = connect()
     if get_meta(conn, "trigram_indexed") != "1":
         typer.echo(
@@ -428,18 +434,20 @@ def morph(
                WHERE d.active = 1"""
         ).fetchall()
 
-    for row in rows:
-        tokenized_title = tokenize_text(row["title"] or "")
-        tokenized_body = tokenize_text(row["body"] or "")
-        conn.execute(
-            "INSERT INTO docs_fts_morph(docid, filepath, title, body) VALUES (?, ?, ?, ?)",
-            (
-                row["docid"],
-                row["collection"] + "/" + row["path"],
-                tokenized_title,
-                tokenized_body,
-            ),
-        )
+    with reporter.track("形態素インデックス構築", len(rows)) as advance:
+        for row in rows:
+            tokenized_title = tokenize_text(row["title"] or "")
+            tokenized_body = tokenize_text(row["body"] or "")
+            conn.execute(
+                "INSERT INTO docs_fts_morph(docid, filepath, title, body) VALUES (?, ?, ?, ?)",
+                (
+                    row["docid"],
+                    row["collection"] + "/" + row["path"],
+                    tokenized_title,
+                    tokenized_body,
+                ),
+            )
+            advance()
 
     set_meta(conn, "morph_indexed", "1")
     set_meta(conn, "morph_tokenizer", "sudachipy/normalized_form")
@@ -452,6 +460,7 @@ def morph(
 def embed(
     force: bool = typer.Option(False, "-f", "--force", help="既存ベクトルを削除して全再構築"),
     collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
 ) -> None:
     """ベクトルインデックスを構築します。"""
     try:
@@ -461,6 +470,7 @@ def embed(
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
 
+    reporter = ProgressReporter(enabled=sys.stderr.isatty() and not quiet)
     conn = connect()
 
     from .store import vec_available
@@ -551,28 +561,30 @@ def embed(
 
     import sqlite_vec
 
-    for doc in rows:
-        body = doc["body"] or ""
-        chunks = chunk_document(body, count_tokens=count_tokens)
-        if not chunks:
-            continue
+    with reporter.track("ベクトル化", len(rows)) as advance:
+        for doc in rows:
+            body = doc["body"] or ""
+            chunks = chunk_document(body, count_tokens=count_tokens)
+            if not chunks:
+                advance()
+                continue
 
-        chunk_texts = [ct for _, _, ct in chunks]
-        vectors = embed_documents(chunk_texts)
+            chunk_texts = [ct for _, _, ct in chunks]
+            vectors = embed_documents(chunk_texts)
 
-        for (chunk_seq, chunk_pos, chunk_text), vec in zip(chunks, vectors):
-            cur = conn.execute(
-                """INSERT INTO chunk_vectors(doc_id, docid, chunk_seq, chunk_pos, chunk_text, embed_model)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (doc["id"], doc["docid"], chunk_seq, chunk_pos, chunk_text, EMBED_MODEL),
-            )
-            chunk_id = cur.lastrowid
-            conn.execute(
-                "INSERT INTO vectors_vec(chunk_id, embedding) VALUES (?, ?)",
-                (chunk_id, sqlite_vec.serialize_float32(vec)),
-            )
+            for (chunk_seq, chunk_pos, chunk_text), vec in zip(chunks, vectors):
+                cur = conn.execute(
+                    """INSERT INTO chunk_vectors(doc_id, docid, chunk_seq, chunk_pos, chunk_text, embed_model)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (doc["id"], doc["docid"], chunk_seq, chunk_pos, chunk_text, EMBED_MODEL),
+                )
+                chunk_id = cur.lastrowid
+                conn.execute(
+                    "INSERT INTO vectors_vec(chunk_id, embedding) VALUES (?, ?)",
+                    (chunk_id, sqlite_vec.serialize_float32(vec)),
+                )
 
-        typer.echo(f"  {doc['collection']}/{doc['path']} ({len(chunks)} チャンク)")
+            advance()
 
     set_meta(conn, "vec_indexed", "1")
     set_meta(conn, "embed_model", EMBED_MODEL)

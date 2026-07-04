@@ -77,9 +77,34 @@ def get_collection(conn: sqlite3.Connection, name: str) -> Optional[sqlite3.Row]
 
 
 def remove_collection(conn: sqlite3.Connection, name: str) -> None:
+    # documents 削除前に FTS / ベクトルデータを一括削除しておく。
+    # documents_delete トリガーは行単位で docid = ? の DELETE を発行するため、
+    # 先に空にしておかないと UNINDEXED な docid 列の全表スキャンが件数分繰り返され
+    # O(N^2) になってしまう。
     conn.execute(
         """DELETE FROM docs_fts_trigram WHERE docid IN (
-               SELECT docid FROM documents WHERE collection = ? AND active = 1
+               SELECT docid FROM documents WHERE collection = ?
+           )""",
+        (name,),
+    )
+    conn.execute(
+        """DELETE FROM docs_fts_morph WHERE docid IN (
+               SELECT docid FROM documents WHERE collection = ?
+           )""",
+        (name,),
+    )
+    if vec_available(conn):
+        conn.execute(
+            """DELETE FROM vectors_vec WHERE chunk_id IN (
+                   SELECT cv.id FROM chunk_vectors cv
+                     JOIN documents d ON cv.docid = d.docid
+                    WHERE d.collection = ?
+               )""",
+            (name,),
+        )
+    conn.execute(
+        """DELETE FROM chunk_vectors WHERE docid IN (
+               SELECT docid FROM documents WHERE collection = ?
            )""",
         (name,),
     )

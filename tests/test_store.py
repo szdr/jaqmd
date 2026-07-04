@@ -106,18 +106,38 @@ def test_reactivate(conn, doc_dir):
 
 
 def test_remove_collection_cascades(conn, doc_dir):
-    """コレクション削除でドキュメントと FTS が全て削除される。"""
+    """コレクション削除でドキュメントと FTS・ベクトルが全て削除される。"""
     add_collection(conn, "test", str(doc_dir))
-    upsert_document(conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000)
-    upsert_document(conn, collection="test", path="b.md", body="内容B", title="B", mtime=1001)
+    docid_a = upsert_document(conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000)
+    docid_b = upsert_document(conn, collection="test", path="b.md", body="内容B", title="B", mtime=1001)
+    conn.execute(
+        "INSERT INTO docs_fts_morph(docid, filepath, title, body) VALUES (?, ?, ?, ?)",
+        (docid_a, "test/a.md", "A", "内容A"),
+    )
+    conn.execute(
+        "INSERT INTO docs_fts_morph(docid, filepath, title, body) VALUES (?, ?, ?, ?)",
+        (docid_b, "test/b.md", "B", "内容B"),
+    )
+    doc_row = conn.execute(
+        "SELECT id FROM documents WHERE docid = ?", (docid_a,)
+    ).fetchone()
+    conn.execute(
+        """INSERT INTO chunk_vectors(doc_id, docid, chunk_seq, chunk_pos, chunk_text, embed_model)
+           VALUES (?, ?, 0, 0, ?, 'test-model')""",
+        (doc_row["id"], docid_a, "内容A"),
+    )
     conn.commit()
 
     remove_collection(conn, "test")
 
     doc_count = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-    fts_count = conn.execute("SELECT COUNT(*) FROM docs_fts_trigram").fetchone()[0]
+    fts_trigram_count = conn.execute("SELECT COUNT(*) FROM docs_fts_trigram").fetchone()[0]
+    fts_morph_count = conn.execute("SELECT COUNT(*) FROM docs_fts_morph").fetchone()[0]
+    chunk_vectors_count = conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0]
     assert doc_count == 0
-    assert fts_count == 0
+    assert fts_trigram_count == 0
+    assert fts_morph_count == 0
+    assert chunk_vectors_count == 0
 
 
 def test_index_meta(conn):
