@@ -70,6 +70,12 @@ def list_collections(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute("SELECT * FROM collections ORDER BY name").fetchall()
 
 
+def get_collection(conn: sqlite3.Connection, name: str) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM collections WHERE name = ?", (name,)
+    ).fetchone()
+
+
 def remove_collection(conn: sqlite3.Connection, name: str) -> None:
     conn.execute(
         """DELETE FROM docs_fts_trigram WHERE docid IN (

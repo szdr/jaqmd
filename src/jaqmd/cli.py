@@ -16,6 +16,7 @@ from .search.query import query as do_query
 from .store import (
     add_collection,
     connect,
+    get_collection,
     get_document,
     get_meta,
     get_stats,
@@ -89,10 +90,18 @@ def collection_remove(
 @app.command()
 def update(
     pull: bool = typer.Option(False, "--pull", help="（予約）"),
+    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
 ) -> None:
     """ファイルをスキャンして trigram FTS インデックスを構築します。"""
     conn = connect()
-    collections = list_collections(conn)
+    if collection:
+        col = get_collection(conn, collection)
+        if col is None:
+            typer.echo(f"エラー: コレクションが見つかりません: {collection}", err=True)
+            raise typer.Exit(1)
+        collections = [col]
+    else:
+        collections = list_collections(conn)
     if not collections:
         typer.echo(
             "コレクションがありません。先に `jaqmd collection add` を実行してください。"
@@ -372,7 +381,9 @@ def cleanup() -> None:
 # ---------------------------------------------------------------------------
 
 @app.command()
-def morph() -> None:
+def morph(
+    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+) -> None:
     """形態素解析インデックスを構築します。"""
     try:
         from .tokenize.morph import tokenize_text
@@ -389,16 +400,33 @@ def morph() -> None:
         )
         raise typer.Exit(1)
 
+    if collection and get_collection(conn, collection) is None:
+        typer.echo(f"エラー: コレクションが見つかりません: {collection}", err=True)
+        raise typer.Exit(1)
+
     typer.echo("形態素インデックスを構築中...")
 
     # 既存エントリを削除してから再投入（冪等）
-    conn.execute("DELETE FROM docs_fts_morph")
-
-    rows = conn.execute(
-        """SELECT d.docid, d.collection, d.path, d.title, c.body
-           FROM documents d JOIN content c ON d.hash = c.hash
-           WHERE d.active = 1"""
-    ).fetchall()
+    if collection:
+        conn.execute(
+            """DELETE FROM docs_fts_morph WHERE docid IN (
+                   SELECT docid FROM documents WHERE collection = ?
+               )""",
+            (collection,),
+        )
+        rows = conn.execute(
+            """SELECT d.docid, d.collection, d.path, d.title, c.body
+               FROM documents d JOIN content c ON d.hash = c.hash
+               WHERE d.active = 1 AND d.collection = ?""",
+            (collection,),
+        ).fetchall()
+    else:
+        conn.execute("DELETE FROM docs_fts_morph")
+        rows = conn.execute(
+            """SELECT d.docid, d.collection, d.path, d.title, c.body
+               FROM documents d JOIN content c ON d.hash = c.hash
+               WHERE d.active = 1"""
+        ).fetchall()
 
     for row in rows:
         tokenized_title = tokenize_text(row["title"] or "")
@@ -423,6 +451,7 @@ def morph() -> None:
 @app.command()
 def embed(
     force: bool = typer.Option(False, "-f", "--force", help="既存ベクトルを削除して全再構築"),
+    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
 ) -> None:
     """ベクトルインデックスを構築します。"""
     try:
@@ -451,26 +480,64 @@ def embed(
         )
         raise typer.Exit(1)
 
+    if collection and get_collection(conn, collection) is None:
+        typer.echo(f"エラー: コレクションが見つかりません: {collection}", err=True)
+        raise typer.Exit(1)
+
     if force:
-        typer.echo("既存ベクトルを削除して全再構築します...")
-        conn.execute("DELETE FROM vectors_vec")
-        conn.execute("DELETE FROM chunk_vectors")
+        if collection:
+            typer.echo(f"既存ベクトルを削除して再構築します（コレクション: {collection}）...")
+            conn.execute(
+                """DELETE FROM vectors_vec WHERE chunk_id IN (
+                       SELECT cv.id FROM chunk_vectors cv
+                         JOIN documents d ON cv.docid = d.docid
+                        WHERE d.collection = ?
+                   )""",
+                (collection,),
+            )
+            conn.execute(
+                """DELETE FROM chunk_vectors WHERE docid IN (
+                       SELECT docid FROM documents WHERE collection = ?
+                   )""",
+                (collection,),
+            )
+        else:
+            typer.echo("既存ベクトルを削除して全再構築します...")
+            conn.execute("DELETE FROM vectors_vec")
+            conn.execute("DELETE FROM chunk_vectors")
         conn.commit()
 
     # 差分: chunk_vectors に未登録の active ドキュメントのみ処理
     if force:
-        rows = conn.execute(
-            """SELECT d.id, d.docid, d.collection, d.path, c.body
-               FROM documents d JOIN content c ON d.hash = c.hash
-               WHERE d.active = 1"""
-        ).fetchall()
+        if collection:
+            rows = conn.execute(
+                """SELECT d.id, d.docid, d.collection, d.path, c.body
+                   FROM documents d JOIN content c ON d.hash = c.hash
+                   WHERE d.active = 1 AND d.collection = ?""",
+                (collection,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT d.id, d.docid, d.collection, d.path, c.body
+                   FROM documents d JOIN content c ON d.hash = c.hash
+                   WHERE d.active = 1"""
+            ).fetchall()
     else:
-        rows = conn.execute(
-            """SELECT d.id, d.docid, d.collection, d.path, c.body
-               FROM documents d JOIN content c ON d.hash = c.hash
-               LEFT JOIN chunk_vectors cv ON cv.docid = d.docid
-               WHERE d.active = 1 AND cv.docid IS NULL"""
-        ).fetchall()
+        if collection:
+            rows = conn.execute(
+                """SELECT d.id, d.docid, d.collection, d.path, c.body
+                   FROM documents d JOIN content c ON d.hash = c.hash
+                   LEFT JOIN chunk_vectors cv ON cv.docid = d.docid
+                   WHERE d.active = 1 AND cv.docid IS NULL AND d.collection = ?""",
+                (collection,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT d.id, d.docid, d.collection, d.path, c.body
+                   FROM documents d JOIN content c ON d.hash = c.hash
+                   LEFT JOIN chunk_vectors cv ON cv.docid = d.docid
+                   WHERE d.active = 1 AND cv.docid IS NULL"""
+            ).fetchall()
 
     if not rows:
         typer.echo("新しくベクトル化するドキュメントはありません。")

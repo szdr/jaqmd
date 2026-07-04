@@ -38,8 +38,13 @@ def trisearch(
     params: list = [fts_query]
 
     if collection:
-        where_clauses.append("filepath LIKE ?")
-        params.append(f"{collection}/%")
+        # 注意: docs_fts_trigram は tokenize='trigram' のため、filepath (UNINDEXED)
+        # に対する LIKE/GLOB はトライグラム索引経由の最適化に誤って解釈され、
+        # 3文字以上の連続一致パターンで 0 件になる。documents 側で絞り込む。
+        where_clauses.append(
+            "docid IN (SELECT docid FROM documents WHERE collection = ?)"
+        )
+        params.append(collection)
 
     where_sql = " AND ".join(where_clauses)
     limit_sql = "" if all_results else f"LIMIT {n}"
