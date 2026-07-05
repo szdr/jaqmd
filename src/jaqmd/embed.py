@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-EMBED_MODEL = "cl-nagoya/ruri-v3-310m"
+EMBED_MODEL = "sirasagi62/ruri-v3-310m-ONNX"
 EMBED_DIM = 768
 DOC_PREFIX = "検索文書: "
 QUERY_PREFIX = "検索クエリ: "
@@ -37,13 +37,22 @@ def _get_model():
     return _model
 
 
-def embed_documents(texts: list[str]) -> list[list[float]]:
-    """文書テキストのリストを embedding する（DOC_PREFIX を自前付与）。"""
+def embed_documents(
+    texts: list[str],
+    *,
+    batch_size: int = 4,
+):
+    """文書テキストのリストを embedding する（DOC_PREFIX を自前付与）。
+
+    Args:
+        texts: 文書テキストのリスト。
+        batch_size: fastembed に渡すバッチサイズ。大きいほど高速だがメモリを使う。
+    """
     if not texts:
         return []
     model = _get_model()
     prefixed = [DOC_PREFIX + t for t in texts]
-    return [list(v) for v in model.embed(prefixed)]
+    return model.embed(prefixed, batch_size=batch_size)
 
 
 def embed_query(text: str) -> list[float]:

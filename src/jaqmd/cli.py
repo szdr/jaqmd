@@ -561,29 +561,42 @@ def embed(
 
     import sqlite_vec
 
-    with reporter.track("ベクトル化", len(rows)) as advance:
+    # フェーズA: 全ドキュメントをチャンク分割し、フラットな一覧にまとめる。
+    # (embedding は文書単位ではなく全チャンクをまとめてバッチ処理するため)
+    all_chunks: list[tuple] = []  # (doc_id, docid, chunk_seq, chunk_pos, chunk_text)
+    with reporter.track("チャンク分割", len(rows)) as advance:
         for doc in rows:
             body = doc["body"] or ""
             chunks = chunk_document(body, count_tokens=count_tokens)
-            if not chunks:
-                advance()
-                continue
-
-            chunk_texts = [ct for _, _, ct in chunks]
-            vectors = embed_documents(chunk_texts)
-
-            for (chunk_seq, chunk_pos, chunk_text), vec in zip(chunks, vectors):
-                cur = conn.execute(
-                    """INSERT INTO chunk_vectors(doc_id, docid, chunk_seq, chunk_pos, chunk_text, embed_model)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (doc["id"], doc["docid"], chunk_seq, chunk_pos, chunk_text, EMBED_MODEL),
+            for chunk_seq, chunk_pos, chunk_text in chunks:
+                all_chunks.append(
+                    (doc["id"], doc["docid"], chunk_seq, chunk_pos, chunk_text)
                 )
-                chunk_id = cur.lastrowid
-                conn.execute(
-                    "INSERT INTO vectors_vec(chunk_id, embedding) VALUES (?, ?)",
-                    (chunk_id, sqlite_vec.serialize_float32(vec)),
-                )
+            advance()
 
+    # フェーズB: 全チャンクをまとめて embedding し、逐次 DB に書き込む。
+    # ドキュメント単位の小さなバッチではなく全チャンクを一括で渡すことで、
+    # fastembed のバッチ処理を活かす。
+    COMMIT_INTERVAL = 1000
+    texts = [c[4] for c in all_chunks]
+    vectors = embed_documents(texts)
+
+    with reporter.track("ベクトル化", len(all_chunks)) as advance:
+        for n, ((doc_id, docid, chunk_seq, chunk_pos, chunk_text), vec) in enumerate(
+            zip(all_chunks, vectors), start=1
+        ):
+            cur = conn.execute(
+                """INSERT INTO chunk_vectors(doc_id, docid, chunk_seq, chunk_pos, chunk_text, embed_model)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (doc_id, docid, chunk_seq, chunk_pos, chunk_text, EMBED_MODEL),
+            )
+            chunk_id = cur.lastrowid
+            conn.execute(
+                "INSERT INTO vectors_vec(chunk_id, embedding) VALUES (?, ?)",
+                (chunk_id, sqlite_vec.serialize_float32(vec)),
+            )
+            if n % COMMIT_INTERVAL == 0:
+                conn.commit()
             advance()
 
     set_meta(conn, "vec_indexed", "1")

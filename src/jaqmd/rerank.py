@@ -10,7 +10,7 @@ from .progress import NULL_REPORTER, ProgressReporter
 if TYPE_CHECKING:
     from .search.trisearch import SearchResult
 
-RERANK_MODEL = "cl-nagoya/ruri-v3-reranker-310m"
+RERANK_MODEL = "szdr/ruri-v3-reranker-310m-onnx"
 RERANK_TOP_K = 50
 
 _encoder = None

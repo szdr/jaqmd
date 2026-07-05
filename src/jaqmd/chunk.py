@@ -33,6 +33,10 @@ def chunk_document(
     if not sentences:
         return []
 
+    # 各文のトークン数は貪欲詰め・オーバーラップ計算で複数回参照されるため、
+    # 文ごとに1回だけトークナイズして使い回す。
+    sent_tokens = [count_tokens(s) for s, _ in sentences]
+
     overlap_tokens = max(1, int(max_tokens * overlap_ratio))
     chunks: list[tuple[int, int, str]] = []
     i = 0
@@ -44,7 +48,7 @@ def chunk_document(
         j = i
         while j < len(sentences):
             s, pos = sentences[j]
-            t = count_tokens(s)
+            t = sent_tokens[j]
             if total > 0 and total + t > max_tokens:
                 break
             sents.append((s, pos))
@@ -63,7 +67,7 @@ def chunk_document(
         overlap_start = j  # デフォルトは overlap なし
         accumulated = 0
         for k in range(j - 1, i, -1):
-            accumulated += count_tokens(sentences[k][0])
+            accumulated += sent_tokens[k]
             overlap_start = k
             if accumulated >= overlap_tokens:
                 break

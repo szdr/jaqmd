@@ -239,7 +239,7 @@ from fastembed import TextEmbedding
 from fastembed.common.model_description import PoolingType, ModelSource
 
 TextEmbedding.add_custom_model(
-    model="cl-nagoya/ruri-v3-310m",
+    model="sirasagi62/ruri-v3-310m-ONNX",
     pooling=PoolingType.MEAN,
     normalization=True,
     sources=ModelSource(hf="sirasagi62/ruri-v3-310m-ONNX"),

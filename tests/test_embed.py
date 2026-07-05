@@ -12,6 +12,7 @@ class _FakeEmbedding:
 
     add_custom_model_calls: list[dict] = []
     embed_calls: list[list[str]] = []
+    embed_kwargs: list[dict] = []
 
     @classmethod
     def add_custom_model(cls, **kwargs):
@@ -20,8 +21,10 @@ class _FakeEmbedding:
     def __init__(self, model_name, cache_dir=None):
         self.model_name = model_name
 
-    def embed(self, texts):
-        self.__class__.embed_calls.append(list(texts))
+    def embed(self, texts, batch_size=256):
+        texts = list(texts)
+        self.__class__.embed_calls.append(texts)
+        self.__class__.embed_kwargs.append({"batch_size": batch_size})
         # 768次元のゼロベクトルを返す
         for _ in texts:
             yield [0.0] * 768
@@ -61,6 +64,7 @@ def patch_fastembed(monkeypatch):
 
     _FakeEmbedding.add_custom_model_calls = []
     _FakeEmbedding.embed_calls = []
+    _FakeEmbedding.embed_kwargs = []
 
     yield
 
@@ -70,7 +74,7 @@ def test_embed_documents_applies_doc_prefix():
     from jaqmd.embed import DOC_PREFIX, embed_documents
 
     texts = ["テキストA", "テキストB"]
-    embed_documents(texts)
+    list(embed_documents(texts))  # embed はジェネレータなので消費する
 
     assert len(_FakeEmbedding.embed_calls) == 1
     passed = _FakeEmbedding.embed_calls[0]
@@ -105,14 +109,20 @@ def test_embed_documents_empty():
 
 
 def test_embed_documents_returns_list_of_floats():
-    """embed_documents の戻り値が list[list[float]] であること。"""
+    """embed_documents の戻り値がベクトルのイテラブルであること（各ベクトルは EMBED_DIM 次元）。"""
     from jaqmd.embed import EMBED_DIM, embed_documents
 
-    result = embed_documents(["テスト"])
-    assert isinstance(result, list)
+    result = list(embed_documents(["テスト"]))
     assert len(result) == 1
-    assert isinstance(result[0], list)
     assert len(result[0]) == EMBED_DIM
+
+
+def test_embed_documents_passes_batch_size():
+    """embed_documents は batch_size を fastembed の embed にそのまま渡す。"""
+    from jaqmd.embed import embed_documents
+
+    list(embed_documents(["テスト"], batch_size=32))
+    assert _FakeEmbedding.embed_kwargs[-1] == {"batch_size": 32}
 
 
 def test_embed_query_returns_list_of_floats():
