@@ -6,10 +6,16 @@ from jaqmd.search.trisearch import SearchResult
 from jaqmd.rerank import rerank, _doc_text
 
 
-def _make_result(docid: str, score: float = 1.0, body: str = "", snippet: str = "snippet") -> SearchResult:
+def _make_result(
+    docid: str, score: float = 1.0, body: str = "", snippet: str = "snippet"
+) -> SearchResult:
     return SearchResult(
-        docid=docid, score=score, filepath=f"{docid}.md",
-        title=docid, snippet=snippet, body=body,
+        docid=docid,
+        score=score,
+        filepath=f"{docid}.md",
+        title=docid,
+        snippet=snippet,
+        body=body,
     )
 
 
@@ -29,6 +35,7 @@ class _DummyEncoder:
 # _doc_text
 # ---------------------------------------------------------------------------
 
+
 def test_doc_text_prefers_body():
     r = _make_result("a", body="本文", snippet="スニペット")
     assert _doc_text(r) == "本文"
@@ -42,6 +49,7 @@ def test_doc_text_falls_back_to_snippet():
 # ---------------------------------------------------------------------------
 # rerank: 恒等フォールバック経路
 # ---------------------------------------------------------------------------
+
 
 def test_rerank_disabled_returns_identity():
     results = [_make_result("a"), _make_result("b")]
@@ -69,6 +77,7 @@ def test_rerank_disabled_respects_n():
 # ---------------------------------------------------------------------------
 # rerank: エンコーダあり（ダミー）
 # ---------------------------------------------------------------------------
+
 
 def test_rerank_reorders_by_encoder_score(monkeypatch):
     results = [
@@ -130,11 +139,13 @@ def test_rerank_integration_real_model_reorders():
     """実モデルで関連度の高い文書が最上位に来ることを検証する。"""
     results = [
         _make_result(
-            "irrelevant", score=1.0,
+            "irrelevant",
+            score=1.0,
             body="今日の天気は晴れで、気温は25度前後の見込みです。",
         ),
         _make_result(
-            "relevant", score=0.5,
+            "relevant",
+            score=0.5,
             body="瑠璃色（るりいろ）は、紫みを帯びた濃い青。瑠璃の色から。",
         ),
     ]

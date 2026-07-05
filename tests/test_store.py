@@ -17,21 +17,29 @@ def test_content_addressable(conn, doc_dir):
     """同一本文は content テーブルに1行だけ登録される。"""
     add_collection(conn, "test", str(doc_dir))
     body = "テストコンテンツ本文"
-    upsert_document(conn, collection="test", path="a.md", body=body, title="A", mtime=1000)
-    upsert_document(conn, collection="test", path="b.md", body=body, title="B", mtime=1001)
+    upsert_document(
+        conn, collection="test", path="a.md", body=body, title="A", mtime=1000
+    )
+    upsert_document(
+        conn, collection="test", path="b.md", body=body, title="B", mtime=1001
+    )
     conn.commit()
 
     count = conn.execute("SELECT COUNT(*) FROM content").fetchone()[0]
     assert count == 1
 
-    doc_count = conn.execute("SELECT COUNT(*) FROM documents WHERE active=1").fetchone()[0]
+    doc_count = conn.execute(
+        "SELECT COUNT(*) FROM documents WHERE active=1"
+    ).fetchone()[0]
     assert doc_count == 2
 
 
 def test_docid_generated(conn, doc_dir):
     """docid は hash の先頭6文字で生成される。"""
     add_collection(conn, "test", str(doc_dir))
-    docid = upsert_document(conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000)
+    docid = upsert_document(
+        conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000
+    )
     conn.commit()
 
     assert len(docid) >= 6
@@ -42,7 +50,9 @@ def test_docid_generated(conn, doc_dir):
 def test_soft_delete(conn, doc_dir):
     """ファイル削除時は active=0 になる。"""
     add_collection(conn, "test", str(doc_dir))
-    upsert_document(conn, collection="test", path="a.md", body="内容", title="A", mtime=1000)
+    upsert_document(
+        conn, collection="test", path="a.md", body="内容", title="A", mtime=1000
+    )
     conn.commit()
 
     soft_delete_path(conn, "test", "a.md")
@@ -56,8 +66,12 @@ def test_soft_delete_removes_from_fts(conn, doc_dir):
     """論理削除で trigram FTS からもエントリが削除される。"""
     add_collection(conn, "test", str(doc_dir))
     upsert_document(
-        conn, collection="test", path="a.md",
-        body="日本語検索エンジンの実装", title="A", mtime=1000,
+        conn,
+        collection="test",
+        path="a.md",
+        body="日本語検索エンジンの実装",
+        title="A",
+        mtime=1000,
     )
     conn.commit()
 
@@ -73,10 +87,14 @@ def test_soft_delete_removes_from_fts(conn, doc_dir):
 def test_hash_change_updates_docid(conn, doc_dir):
     """本文変更で docid が更新され、FTS も更新される。"""
     add_collection(conn, "test", str(doc_dir))
-    docid1 = upsert_document(conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000)
+    docid1 = upsert_document(
+        conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000
+    )
     conn.commit()
 
-    docid2 = upsert_document(conn, collection="test", path="a.md", body="内容Bに変更", title="A", mtime=1001)
+    docid2 = upsert_document(
+        conn, collection="test", path="a.md", body="内容Bに変更", title="A", mtime=1001
+    )
     conn.commit()
 
     assert docid1 != docid2
@@ -91,12 +109,16 @@ def test_hash_change_updates_docid(conn, doc_dir):
 def test_reactivate(conn, doc_dir):
     """soft delete 後に同じファイルが戻ると active=1 に再活性化される。"""
     add_collection(conn, "test", str(doc_dir))
-    upsert_document(conn, collection="test", path="a.md", body="内容", title="A", mtime=1000)
+    upsert_document(
+        conn, collection="test", path="a.md", body="内容", title="A", mtime=1000
+    )
     conn.commit()
     soft_delete_path(conn, "test", "a.md")
     conn.commit()
 
-    upsert_document(conn, collection="test", path="a.md", body="内容", title="A", mtime=1002)
+    upsert_document(
+        conn, collection="test", path="a.md", body="内容", title="A", mtime=1002
+    )
     conn.commit()
 
     row = conn.execute("SELECT active FROM documents WHERE path='a.md'").fetchone()
@@ -108,8 +130,12 @@ def test_reactivate(conn, doc_dir):
 def test_remove_collection_cascades(conn, doc_dir):
     """コレクション削除でドキュメントと FTS・ベクトルが全て削除される。"""
     add_collection(conn, "test", str(doc_dir))
-    docid_a = upsert_document(conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000)
-    docid_b = upsert_document(conn, collection="test", path="b.md", body="内容B", title="B", mtime=1001)
+    docid_a = upsert_document(
+        conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000
+    )
+    docid_b = upsert_document(
+        conn, collection="test", path="b.md", body="内容B", title="B", mtime=1001
+    )
     conn.execute(
         "INSERT INTO docs_fts_morph(docid, filepath, title, body) VALUES (?, ?, ?, ?)",
         (docid_a, "test/a.md", "A", "内容A"),
@@ -131,9 +157,13 @@ def test_remove_collection_cascades(conn, doc_dir):
     remove_collection(conn, "test")
 
     doc_count = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-    fts_trigram_count = conn.execute("SELECT COUNT(*) FROM docs_fts_trigram").fetchone()[0]
+    fts_trigram_count = conn.execute(
+        "SELECT COUNT(*) FROM docs_fts_trigram"
+    ).fetchone()[0]
     fts_morph_count = conn.execute("SELECT COUNT(*) FROM docs_fts_morph").fetchone()[0]
-    chunk_vectors_count = conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0]
+    chunk_vectors_count = conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[
+        0
+    ]
     assert doc_count == 0
     assert fts_trigram_count == 0
     assert fts_morph_count == 0
@@ -175,18 +205,25 @@ def test_idempotent_schema_on_legacy_db(tmp_cache, monkeypatch):
 
     # 新しい connect() で接続 → schema.sql が冪等に適用される
     from jaqmd.store import connect
+
     conn = connect()
 
-    tables = {r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    ).fetchall()}
+    tables = {
+        r[0]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
     assert "index_meta" in tables
     assert "collections" in tables
     assert "path_contexts" in tables
 
-    triggers = {r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='trigger'"
-    ).fetchall()}
+    triggers = {
+        r[0]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='trigger'"
+        ).fetchall()
+    }
     assert "documents_ai" in triggers
     assert "documents_soft_delete" in triggers
 
@@ -200,8 +237,12 @@ def test_idempotent_schema_on_legacy_db(tmp_cache, monkeypatch):
 def test_list_active_paths(conn, doc_dir):
     """list_active_paths は active=1 のパスのみ返す。"""
     add_collection(conn, "test", str(doc_dir))
-    upsert_document(conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000)
-    upsert_document(conn, collection="test", path="b.md", body="内容B", title="B", mtime=1001)
+    upsert_document(
+        conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000
+    )
+    upsert_document(
+        conn, collection="test", path="b.md", body="内容B", title="B", mtime=1001
+    )
     conn.commit()
     soft_delete_path(conn, "test", "b.md")
     conn.commit()

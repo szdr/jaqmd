@@ -20,12 +20,14 @@ def extract_snippet(text: str, terms: list[str], *, max_chars: int = 200) -> str
 
     # --- 1. 文に分割 ---
     from ..chunk import _split_sentences
+
     sentences = _split_sentences(text)
     if not sentences:
         return text[:max_chars]
 
     # --- 2. terms から trigram セット生成 ---
     from ..tokenize.trigram import _trigrams
+
     q_trigrams: set[str] = set()
     for tok in terms:
         q_trigrams.update(_trigrams(tok))

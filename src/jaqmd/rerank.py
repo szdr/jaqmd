@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import dataclasses
 import sys
 from pathlib import Path
@@ -51,7 +53,9 @@ def _get_encoder():
         )
         cache_dir = Path.home() / ".cache" / "jaqmd" / "models"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        _encoder = TextCrossEncoder(model_name=RERANK_MODEL, cache_dir=str(cache_dir))
+        _encoder = TextCrossEncoder(
+            model_name=RERANK_MODEL, cache_dir=str(cache_dir), threads=os.cpu_count()
+        )
     except Exception as e:
         print(
             f"警告: reranker モデルのロードに失敗しました（{e}）。無効化して続行します。",
@@ -106,10 +110,7 @@ def rerank(
 
     with reporter.step(f"リランク ({len(head)} 件)"):
         scores = list(encoder.rerank(query, [_doc_text(r) for r in head]))
-    rescored = [
-        dataclasses.replace(r, score=float(s))
-        for r, s in zip(head, scores)
-    ]
+    rescored = [dataclasses.replace(r, score=float(s)) for r, s in zip(head, scores)]
     rescored.sort(key=lambda r: r.score, reverse=True)
 
     out = rescored + tail

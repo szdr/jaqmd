@@ -41,6 +41,7 @@ def main() -> None:
 # collection サブコマンド
 # ---------------------------------------------------------------------------
 
+
 @collection_app.command("add")
 def collection_add(
     path: str = typer.Argument(..., help="コレクションのディレクトリパス"),
@@ -87,10 +88,13 @@ def collection_remove(
 # update
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def update(
     pull: bool = typer.Option(False, "--pull", help="（予約）"),
-    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    collection: Optional[str] = typer.Option(
+        None, "--collection", "-c", help="コレクション絞り込み"
+    ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
 ) -> None:
     """ファイルをスキャンして trigram FTS インデックスを構築します。"""
@@ -119,7 +123,10 @@ def update(
         glob_mask = col["glob_mask"]
 
         if not Path(col_path).is_dir():
-            typer.echo(f"警告: コレクションパスが見つかりません（スキップ）: {col_path}", err=True)
+            typer.echo(
+                f"警告: コレクションパスが見つかりません（スキップ）: {col_path}",
+                err=True,
+            )
             continue
 
         typer.echo(f"スキャン中: {name} ({col_path})")
@@ -156,6 +163,7 @@ def update(
 # 検索コマンド共通ロジック
 # ---------------------------------------------------------------------------
 
+
 def _run_search(
     query: str,
     *,
@@ -186,8 +194,12 @@ def _run_search(
 
     fn = search_fn or do_trisearch
     results = fn(
-        conn, query, n=n, collection=collection,
-        min_score=min_score, all_results=all_results,
+        conn,
+        query,
+        n=n,
+        collection=collection,
+        min_score=min_score,
+        all_results=all_results,
         reporter=reporter,
         **(search_kwargs or {}),
     )
@@ -209,11 +221,14 @@ def _run_search(
 # search
 # ---------------------------------------------------------------------------
 
+
 @app.command(name="search")
 def search_command(
     query: str = typer.Argument(..., help="検索クエリ"),
     n: int = typer.Option(5, "-n", help="結果件数"),
-    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    collection: Optional[str] = typer.Option(
+        None, "--collection", "-c", help="コレクション絞り込み"
+    ),
     min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
     all_results: bool = typer.Option(False, "--all", help="全件返却"),
     full: bool = typer.Option(False, "--full", help="全文表示"),
@@ -225,15 +240,24 @@ def search_command(
 ) -> None:
     """trigram BM25 検索を実行します。"""
     _run_search(
-        query, n=n, collection=collection, min_score=min_score,
-        all_results=all_results, full=full, json_out=json_out,
-        md=md, xml=xml, files=files, quiet=quiet,
+        query,
+        n=n,
+        collection=collection,
+        min_score=min_score,
+        all_results=all_results,
+        full=full,
+        json_out=json_out,
+        md=md,
+        xml=xml,
+        files=files,
+        quiet=quiet,
     )
 
 
 # ---------------------------------------------------------------------------
 # get / multi-get
 # ---------------------------------------------------------------------------
+
 
 @app.command(name="get")
 def get_command(
@@ -276,7 +300,9 @@ def multi_get_command(
         (pattern,),
     ).fetchall()
     if not rows:
-        typer.echo(f"エラー: マッチするドキュメントが見つかりません: {pattern}", err=True)
+        typer.echo(
+            f"エラー: マッチするドキュメントが見つかりません: {pattern}", err=True
+        )
         raise typer.Exit(1)
     for row in rows:
         typer.echo(f"--- {row['docid']} ---")
@@ -286,6 +312,7 @@ def multi_get_command(
 # ---------------------------------------------------------------------------
 # ls
 # ---------------------------------------------------------------------------
+
 
 @app.command(name="ls")
 def ls_command(
@@ -318,6 +345,7 @@ def ls_command(
 # status
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def status() -> None:
     """インデックスの構築状態を表示します。"""
@@ -334,15 +362,21 @@ def status() -> None:
 
     trigram_ok = stats["trigram"] > 0 or stats["total"] == 0
     trigram_mark = "✓" if trigram_ok else "✗"
-    typer.echo(f"trigram FTS : {trigram_mark} {stats['trigram']:,} docs    (jaqmd update)")
+    typer.echo(
+        f"trigram FTS : {trigram_mark} {stats['trigram']:,} docs    (jaqmd update)"
+    )
 
     morph_mark = "✓" if stats["morph_indexed"] else "✗"
     morph_hint = "" if stats["morph_indexed"] else "   → run: jaqmd morph"
-    typer.echo(f"morph  FTS  : {morph_mark} {'indexed' if stats['morph_indexed'] else 'not indexed'}{morph_hint}")
+    typer.echo(
+        f"morph  FTS  : {morph_mark} {'indexed' if stats['morph_indexed'] else 'not indexed'}{morph_hint}"
+    )
 
     vec_mark = "✓" if stats["vec_indexed"] else "✗"
     vec_hint = "" if stats["vec_indexed"] else "   → run: jaqmd embed"
-    typer.echo(f"vectors     : {vec_mark} {'indexed' if stats['vec_indexed'] else 'not indexed'}{vec_hint}")
+    typer.echo(
+        f"vectors     : {vec_mark} {'indexed' if stats['vec_indexed'] else 'not indexed'}{vec_hint}"
+    )
 
     typer.echo(sep)
 
@@ -367,6 +401,7 @@ def status() -> None:
 # cleanup
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def cleanup() -> None:
     """論理削除済みドキュメントを削除して DB を最適化します。"""
@@ -377,16 +412,21 @@ def cleanup() -> None:
     conn.execute("DELETE FROM documents WHERE active = 0")
     conn.commit()
     conn.execute("VACUUM")
-    typer.echo(f"クリーンアップ完了: {deleted} 件の論理削除済みエントリを削除しました。")
+    typer.echo(
+        f"クリーンアップ完了: {deleted} 件の論理削除済みエントリを削除しました。"
+    )
 
 
 # ---------------------------------------------------------------------------
 # 未実装コマンド（次イテレーション）
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def morph(
-    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    collection: Optional[str] = typer.Option(
+        None, "--collection", "-c", help="コレクション絞り込み"
+    ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
 ) -> None:
     """形態素解析インデックスを構築します。"""
@@ -458,9 +498,14 @@ def morph(
 
 @app.command()
 def embed(
-    force: bool = typer.Option(False, "-f", "--force", help="既存ベクトルを削除して全再構築"),
-    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    force: bool = typer.Option(
+        False, "-f", "--force", help="既存ベクトルを削除して全再構築"
+    ),
+    collection: Optional[str] = typer.Option(
+        None, "--collection", "-c", help="コレクション絞り込み"
+    ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
+    batch_size: int = typer.Option(1, "--batch-size", help="embedding のバッチサイズ"),
 ) -> None:
     """ベクトルインデックスを構築します。"""
     try:
@@ -474,6 +519,7 @@ def embed(
     conn = connect()
 
     from .store import vec_available
+
     if not vec_available(conn):
         typer.echo(
             "エラー: sqlite-vec 拡張をロードできません。\n"
@@ -496,7 +542,9 @@ def embed(
 
     if force:
         if collection:
-            typer.echo(f"既存ベクトルを削除して再構築します（コレクション: {collection}）...")
+            typer.echo(
+                f"既存ベクトルを削除して再構築します（コレクション: {collection}）..."
+            )
             conn.execute(
                 """DELETE FROM vectors_vec WHERE chunk_id IN (
                        SELECT cv.id FROM chunk_vectors cv
@@ -579,7 +627,7 @@ def embed(
     # fastembed のバッチ処理を活かす。
     COMMIT_INTERVAL = 1000
     texts = [c[4] for c in all_chunks]
-    vectors = embed_documents(texts)
+    vectors = embed_documents(texts, batch_size=batch_size)
 
     with reporter.track("ベクトル化", len(all_chunks)) as advance:
         for n, ((doc_id, docid, chunk_seq, chunk_pos, chunk_text), vec) in enumerate(
@@ -611,7 +659,9 @@ def embed(
 def mosearch(
     query: str = typer.Argument(..., help="検索クエリ"),
     n: int = typer.Option(5, "-n", help="結果件数"),
-    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    collection: Optional[str] = typer.Option(
+        None, "--collection", "-c", help="コレクション絞り込み"
+    ),
     min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
     all_results: bool = typer.Option(False, "--all", help="全件返却"),
     full: bool = typer.Option(False, "--full", help="全文表示"),
@@ -623,9 +673,17 @@ def mosearch(
 ) -> None:
     """形態素 BM25 検索を実行します。"""
     _run_search(
-        query, n=n, collection=collection, min_score=min_score,
-        all_results=all_results, full=full, json_out=json_out,
-        md=md, xml=xml, files=files, quiet=quiet,
+        query,
+        n=n,
+        collection=collection,
+        min_score=min_score,
+        all_results=all_results,
+        full=full,
+        json_out=json_out,
+        md=md,
+        xml=xml,
+        files=files,
+        quiet=quiet,
         search_fn=do_mosearch,
         meta_key="morph_indexed",
         meta_missing_msg=(
@@ -639,7 +697,9 @@ def mosearch(
 def vsearch(
     query: str = typer.Argument(..., help="検索クエリ"),
     n: int = typer.Option(5, "-n", help="結果件数"),
-    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    collection: Optional[str] = typer.Option(
+        None, "--collection", "-c", help="コレクション絞り込み"
+    ),
     min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
     all_results: bool = typer.Option(False, "--all", help="全件返却"),
     full: bool = typer.Option(False, "--full", help="全文表示"),
@@ -651,9 +711,17 @@ def vsearch(
 ) -> None:
     """ベクトル意味検索を実行します。"""
     _run_search(
-        query, n=n, collection=collection, min_score=min_score,
-        all_results=all_results, full=full, json_out=json_out,
-        md=md, xml=xml, files=files, quiet=quiet,
+        query,
+        n=n,
+        collection=collection,
+        min_score=min_score,
+        all_results=all_results,
+        full=full,
+        json_out=json_out,
+        md=md,
+        xml=xml,
+        files=files,
+        quiet=quiet,
         search_fn=do_vsearch,
         meta_key="vec_indexed",
         meta_missing_msg=(
@@ -667,7 +735,9 @@ def vsearch(
 def query(
     q: str = typer.Argument(..., help="検索クエリ"),
     n: int = typer.Option(5, "-n", help="結果件数"),
-    collection: Optional[str] = typer.Option(None, "--collection", "-c", help="コレクション絞り込み"),
+    collection: Optional[str] = typer.Option(
+        None, "--collection", "-c", help="コレクション絞り込み"
+    ),
     min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
     all_results: bool = typer.Option(False, "--all", help="全件返却"),
     full: bool = typer.Option(False, "--full", help="全文表示"),
@@ -680,9 +750,17 @@ def query(
 ) -> None:
     """ハイブリッド検索（RRF 融合: trigram / morph / vector）。"""
     _run_search(
-        q, n=n, collection=collection, min_score=min_score,
-        all_results=all_results, full=full, json_out=json_out,
-        md=md, xml=xml, files=files, quiet=quiet,
+        q,
+        n=n,
+        collection=collection,
+        min_score=min_score,
+        all_results=all_results,
+        full=full,
+        json_out=json_out,
+        md=md,
+        xml=xml,
+        files=files,
+        quiet=quiet,
         search_fn=do_query,
         meta_key="trigram_indexed",
         meta_missing_msg=(

@@ -7,19 +7,25 @@ from jaqmd.search.trisearch import trisearch
 def indexed_conn(conn, doc_dir):
     add_collection(conn, "test", str(doc_dir))
     upsert_document(
-        conn, collection="test", path="a.md",
+        conn,
+        collection="test",
+        path="a.md",
         body="形態素解析は日本語の自然言語処理の基礎技術です",
         title="形態素解析について",
         mtime=1000,
     )
     upsert_document(
-        conn, collection="test", path="b.md",
+        conn,
+        collection="test",
+        path="b.md",
         body="検索エンジンの仕組みと実装方法を解説します",
         title="検索エンジン入門",
         mtime=1001,
     )
     upsert_document(
-        conn, collection="test", path="c.md",
+        conn,
+        collection="test",
+        path="c.md",
         body="サーバーの設定と運用について説明します",
         title="サーバー運用ガイド",
         mtime=1002,
@@ -73,8 +79,22 @@ def test_collection_filter(conn, tmp_path):
 
     add_collection(conn, "col1", str(d1))
     add_collection(conn, "col2", str(d2))
-    upsert_document(conn, collection="col1", path="a.md", body="日本語処理の解説", title="A", mtime=1000)
-    upsert_document(conn, collection="col2", path="b.md", body="日本語処理は重要です", title="B", mtime=1001)
+    upsert_document(
+        conn,
+        collection="col1",
+        path="a.md",
+        body="日本語処理の解説",
+        title="A",
+        mtime=1000,
+    )
+    upsert_document(
+        conn,
+        collection="col2",
+        path="b.md",
+        body="日本語処理は重要です",
+        title="B",
+        mtime=1001,
+    )
     conn.commit()
 
     results = trisearch(conn, "日本語処理", collection="col1")

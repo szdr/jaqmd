@@ -40,7 +40,7 @@ def _get_model():
 def embed_documents(
     texts: list[str],
     *,
-    batch_size: int = 4,
+    batch_size: int = 1,
 ):
     """文書テキストのリストを embedding する（DOC_PREFIX を自前付与）。
 
@@ -70,9 +70,8 @@ def count_tokens(text: str) -> int:
     model = _get_model()
     # fastembed は TextEmbedding.model 内部に tokenizer を持つ
     # バージョンによりアクセスパスが異なるため複数の場所を試みる
-    tokenizer = (
-        getattr(model, "tokenizer", None)
-        or getattr(getattr(model, "model", None), "tokenizer", None)
+    tokenizer = getattr(model, "tokenizer", None) or getattr(
+        getattr(model, "model", None), "tokenizer", None
     )
     if tokenizer is not None:
         try:

@@ -27,7 +27,7 @@ def scan_collection(
             continue
         try:
             body = p.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        except OSError, UnicodeDecodeError:
             continue
 
         rel = str(p.relative_to(base))

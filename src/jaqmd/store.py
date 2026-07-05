@@ -30,6 +30,7 @@ def _load_vec(conn: sqlite3.Connection) -> bool:
     """
     try:
         import sqlite_vec
+
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
         conn.enable_load_extension(False)
@@ -53,6 +54,7 @@ def vec_available(conn: sqlite3.Connection) -> bool:
 
 # --- collections ---
 
+
 def add_collection(
     conn: sqlite3.Connection,
     name: str,
@@ -71,9 +73,7 @@ def list_collections(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def get_collection(conn: sqlite3.Connection, name: str) -> Optional[sqlite3.Row]:
-    return conn.execute(
-        "SELECT * FROM collections WHERE name = ?", (name,)
-    ).fetchone()
+    return conn.execute("SELECT * FROM collections WHERE name = ?", (name,)).fetchone()
 
 
 def remove_collection(conn: sqlite3.Connection, name: str) -> None:
@@ -114,6 +114,7 @@ def remove_collection(conn: sqlite3.Connection, name: str) -> None:
 
 
 # --- documents ---
+
 
 def _make_docid(hash_: str, conn: sqlite3.Connection) -> str:
     """hash プレフィックスから重複しない docid を生成する。"""
@@ -177,9 +178,7 @@ def upsert_document(
     return existing["docid"]
 
 
-def soft_delete_path(
-    conn: sqlite3.Connection, collection: str, path: str
-) -> None:
+def soft_delete_path(conn: sqlite3.Connection, collection: str, path: str) -> None:
     conn.execute(
         "UPDATE documents SET active = 0 WHERE collection = ? AND path = ? AND active = 1",
         (collection, path),
@@ -193,9 +192,7 @@ def list_active_paths(conn: sqlite3.Connection, collection: str) -> set[str]:
     return {r["path"] for r in rows}
 
 
-def get_document(
-    conn: sqlite3.Connection, ref: str
-) -> Optional[sqlite3.Row]:
+def get_document(conn: sqlite3.Connection, ref: str) -> Optional[sqlite3.Row]:
     """docid またはパスでドキュメントを1件取得する。"""
     row = conn.execute(
         """SELECT d.id, d.docid, d.collection, d.path, d.title, c.body
@@ -216,10 +213,9 @@ def get_document(
 
 # --- index_meta ---
 
+
 def get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
-    row = conn.execute(
-        "SELECT value FROM index_meta WHERE key = ?", (key,)
-    ).fetchone()
+    row = conn.execute("SELECT value FROM index_meta WHERE key = ?", (key,)).fetchone()
     return row["value"] if row else None
 
 
@@ -232,12 +228,10 @@ def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
 
 
 def get_stats(conn: sqlite3.Connection) -> dict:
-    total = conn.execute(
-        "SELECT COUNT(*) FROM documents WHERE active = 1"
-    ).fetchone()[0]
-    trigram_count = conn.execute(
-        "SELECT COUNT(*) FROM docs_fts_trigram"
-    ).fetchone()[0]
+    total = conn.execute("SELECT COUNT(*) FROM documents WHERE active = 1").fetchone()[
+        0
+    ]
+    trigram_count = conn.execute("SELECT COUNT(*) FROM docs_fts_trigram").fetchone()[0]
     collections = list_collections(conn)
     morph_indexed = get_meta(conn, "morph_indexed") == "1"
     vec_indexed = get_meta(conn, "vec_indexed") == "1"

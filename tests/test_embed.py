@@ -1,4 +1,5 @@
 """embed.py の単体テスト — prefix 付与の検証（fastembed 本体はモック）。"""
+
 from __future__ import annotations
 
 import pytest
@@ -6,6 +7,7 @@ import pytest
 
 # fastembed が未インストールの場合はモックを強制使用するため importorskip しない
 # 代わりに fastembed の TextEmbedding 自体をモックする
+
 
 class _FakeEmbedding:
     """fastembed.TextEmbedding の最小モック。"""
@@ -56,10 +58,13 @@ def patch_fastembed(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "fastembed", fake_fastembed)
     monkeypatch.setitem(sys.modules, "fastembed.common", fake_common)
-    monkeypatch.setitem(sys.modules, "fastembed.common.model_description", fake_model_desc)
+    monkeypatch.setitem(
+        sys.modules, "fastembed.common.model_description", fake_model_desc
+    )
 
     # _model キャッシュをリセット
     import jaqmd.embed as embed_mod
+
     monkeypatch.setattr(embed_mod, "_model", None)
 
     _FakeEmbedding.add_custom_model_calls = []

@@ -233,6 +233,7 @@ name = "jaqmd"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "rich" },
     { name = "sqlite-vec" },
     { name = "typer" },
 ]
@@ -260,6 +261,7 @@ dev = [
 requires-dist = [
     { name = "fastembed", marker = "extra == 'all'", specifier = ">=0.8" },
     { name = "fastembed", marker = "extra == 'vector'", specifier = ">=0.8" },
+    { name = "rich", specifier = ">=13.0" },
     { name = "sqlite-vec", specifier = ">=0.1" },
     { name = "sudachidict-core", marker = "extra == 'all'" },
     { name = "sudachidict-core", marker = "extra == 'morph'" },

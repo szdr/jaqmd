@@ -1,4 +1,5 @@
 """vsearch の単体テスト — sqlite-vec に既知ベクトルを直接 INSERT してモデルなしで検証。"""
+
 from __future__ import annotations
 
 import pytest
@@ -11,7 +12,9 @@ from jaqmd.search.vsearch import vsearch
 
 def _insert_vec(conn, collection, path, title, body, vector):
     """テスト用: ドキュメントを upsert して chunk_vectors + vectors_vec に直接 INSERT する。"""
-    upsert_document(conn, collection=collection, path=path, body=body, title=title, mtime=1000)
+    upsert_document(
+        conn, collection=collection, path=path, body=body, title=title, mtime=1000
+    )
     row = conn.execute(
         "SELECT id, docid FROM documents WHERE collection=? AND path=?",
         (collection, path),
@@ -59,11 +62,13 @@ def vec_conn(conn, doc_dir):
 def _mock_embed_query(monkeypatch, vector):
     """vsearch 内の embed_query をモックに差し替える。"""
     import jaqmd.search.vsearch as vsearch_mod
+
     monkeypatch.setattr(vsearch_mod, "embed_query", lambda q: vector, raising=False)
 
     # vsearch モジュール内で from ..embed import embed_query しているので直接パッチ
     import importlib
     import jaqmd.search.vsearch
+
     importlib.import_module("jaqmd.search.vsearch")
 
     # モンキーパッチ: vsearch 関数の embed_query 呼び出しを差し替える
@@ -72,6 +77,7 @@ def _mock_embed_query(monkeypatch, vector):
     def patched_vsearch(conn, query, **kwargs):
         # embed_query をモックしてから呼び出す
         import jaqmd.embed as embed_mod
+
         orig = getattr(embed_mod, "embed_query", None)
         embed_mod.embed_query = lambda q: vector
         try:
@@ -90,6 +96,7 @@ def test_basic_vsearch(vec_conn, monkeypatch):
     query_vec = _unit_vec(DIM, 0)
 
     import jaqmd.embed as embed_mod
+
     monkeypatch.setattr(embed_mod, "embed_query", lambda q: query_vec)
 
     results = vsearch(vec_conn, "テストクエリ", n=3)
@@ -122,6 +129,7 @@ def test_doc_unit_aggregation(vec_conn, monkeypatch):
     vec_conn.commit()
 
     import jaqmd.embed as embed_mod
+
     monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 1))
 
     results = vsearch(vec_conn, "テストクエリ", n=5)
@@ -133,6 +141,7 @@ def test_score_range(vec_conn, monkeypatch):
     """score が [0, 1] の範囲に収まること（正規化 embedding の場合）。"""
     DIM = 768
     import jaqmd.embed as embed_mod
+
     monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 0))
 
     results = vsearch(vec_conn, "テスト", n=3)
@@ -144,6 +153,7 @@ def test_n_limit(vec_conn, monkeypatch):
     """n を指定したとき最大 n 件しか返さないこと。"""
     DIM = 768
     import jaqmd.embed as embed_mod
+
     monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 0))
 
     results = vsearch(vec_conn, "テスト", n=2)
@@ -154,6 +164,7 @@ def test_all_results(vec_conn, monkeypatch):
     """all_results=True のとき n を超えて返すこと。"""
     DIM = 768
     import jaqmd.embed as embed_mod
+
     monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 0))
 
     results = vsearch(vec_conn, "テスト", n=1, all_results=True)
@@ -178,6 +189,7 @@ def test_soft_deleted_excluded(vec_conn, monkeypatch):
     vec_conn.commit()
 
     import jaqmd.embed as embed_mod
+
     monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 0))
 
     results = vsearch(vec_conn, "テスト", n=5)
@@ -195,7 +207,14 @@ def test_collection_filter(vec_conn, monkeypatch, doc_dir):
         "INSERT INTO collections(name, path, glob_mask) VALUES ('other', ?, '**/*.md')",
         (str(doc_dir),),
     )
-    upsert_document(vec_conn, collection="other", path="x.md", body="XXXの内容", title="X", mtime=1000)
+    upsert_document(
+        vec_conn,
+        collection="other",
+        path="x.md",
+        body="XXXの内容",
+        title="X",
+        mtime=1000,
+    )
     xrow = vec_conn.execute(
         "SELECT id, docid FROM documents WHERE collection='other' AND path='x.md'"
     ).fetchone()
@@ -211,6 +230,7 @@ def test_collection_filter(vec_conn, monkeypatch, doc_dir):
     vec_conn.commit()
 
     import jaqmd.embed as embed_mod
+
     monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 0))
 
     results = vsearch(vec_conn, "テスト", n=5, collection="test")
@@ -234,7 +254,9 @@ def test_vsearch_with_real_model(tmp_cache):
     from jaqmd.chunk import chunk_document
 
     body = "東京は日本の首都です。大阪は関西の中心都市です。"
-    upsert_document(conn, collection="integ", path="test.md", body=body, title="テスト", mtime=1000)
+    upsert_document(
+        conn, collection="integ", path="test.md", body=body, title="テスト", mtime=1000
+    )
     row = conn.execute(
         "SELECT id, docid FROM documents WHERE collection='integ' AND path='test.md'"
     ).fetchone()
@@ -243,6 +265,7 @@ def test_vsearch_with_real_model(tmp_cache):
     vecs = embed_documents([ct for _, _, ct in chunks])
 
     import sqlite_vec as sv
+
     for (seq, pos, ct), vec in zip(chunks, vecs):
         cur = conn.execute(
             """INSERT INTO chunk_vectors(doc_id, docid, chunk_seq, chunk_pos, chunk_text, embed_model)

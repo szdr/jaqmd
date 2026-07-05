@@ -13,10 +13,15 @@ from jaqmd.search.query import _rrf_fuse, RRF_K, query
 # _rrf_fuse ユニットテスト（外部依存なし）
 # ---------------------------------------------------------------------------
 
+
 def _make_result(docid: str, score: float = 1.0) -> SearchResult:
     return SearchResult(
-        docid=docid, score=score, filepath=f"{docid}.md",
-        title=docid, snippet="snippet", body="body",
+        docid=docid,
+        score=score,
+        filepath=f"{docid}.md",
+        title=docid,
+        snippet="snippet",
+        body="body",
     )
 
 
@@ -90,19 +95,35 @@ def test_rrf_fuse_score_ordering():
 # query 統合テスト: trigram のみ（degrade）
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def trigram_conn(conn, doc_dir):
     """trigram インデックスのみ構築済みの接続。"""
     add_collection(conn, "test", str(doc_dir))
-    upsert_document(conn, collection="test", path="a.md",
-                    body="形態素解析は日本語の自然言語処理の基礎技術です",
-                    title="形態素解析について", mtime=1000)
-    upsert_document(conn, collection="test", path="b.md",
-                    body="検索エンジンの仕組みと実装方法を解説します",
-                    title="検索エンジン入門", mtime=1001)
-    upsert_document(conn, collection="test", path="c.md",
-                    body="サーバーの設定と運用について説明します",
-                    title="サーバー運用ガイド", mtime=1002)
+    upsert_document(
+        conn,
+        collection="test",
+        path="a.md",
+        body="形態素解析は日本語の自然言語処理の基礎技術です",
+        title="形態素解析について",
+        mtime=1000,
+    )
+    upsert_document(
+        conn,
+        collection="test",
+        path="b.md",
+        body="検索エンジンの仕組みと実装方法を解説します",
+        title="検索エンジン入門",
+        mtime=1001,
+    )
+    upsert_document(
+        conn,
+        collection="test",
+        path="c.md",
+        body="サーバーの設定と運用について説明します",
+        title="サーバー運用ガイド",
+        mtime=1002,
+    )
     conn.commit()
     set_meta(conn, "trigram_indexed", "1")
     conn.commit()
@@ -158,13 +179,26 @@ def test_query_score_ordering(trigram_conn):
 def test_query_collection_filter(conn, tmp_path):
     """collection フィルタが正しく動作する。"""
     d1, d2 = tmp_path / "col1", tmp_path / "col2"
-    d1.mkdir(); d2.mkdir()
+    d1.mkdir()
+    d2.mkdir()
     add_collection(conn, "col1", str(d1))
     add_collection(conn, "col2", str(d2))
-    upsert_document(conn, collection="col1", path="a.md",
-                    body="日本語処理の解説", title="A", mtime=1000)
-    upsert_document(conn, collection="col2", path="b.md",
-                    body="日本語処理は重要です", title="B", mtime=1001)
+    upsert_document(
+        conn,
+        collection="col1",
+        path="a.md",
+        body="日本語処理の解説",
+        title="A",
+        mtime=1000,
+    )
+    upsert_document(
+        conn,
+        collection="col2",
+        path="b.md",
+        body="日本語処理は重要です",
+        title="B",
+        mtime=1001,
+    )
     conn.commit()
     set_meta(conn, "trigram_indexed", "1")
     conn.commit()
@@ -179,7 +213,9 @@ def test_query_min_score_filter(trigram_conn):
     if not all_res:
         pytest.skip("検索結果が0件")
     max_score = max(r.score for r in all_res)
-    filtered = query(trigram_conn, "形態素解析", all_results=True, min_score=max_score + 1.0)
+    filtered = query(
+        trigram_conn, "形態素解析", all_results=True, min_score=max_score + 1.0
+    )
     assert filtered == []
 
 
@@ -192,7 +228,10 @@ sudachipy = pytest.importorskip("sudachipy")
 
 def _insert_morph(conn, collection, path, title, body):
     from jaqmd.tokenize.morph import tokenize_text
-    upsert_document(conn, collection=collection, path=path, body=body, title=title, mtime=1000)
+
+    upsert_document(
+        conn, collection=collection, path=path, body=body, title=title, mtime=1000
+    )
     row = conn.execute(
         "SELECT docid FROM documents WHERE collection=? AND path=?",
         (collection, path),
@@ -200,7 +239,12 @@ def _insert_morph(conn, collection, path, title, body):
     docid = row["docid"]
     conn.execute(
         "INSERT INTO docs_fts_morph(docid, filepath, title, body) VALUES (?, ?, ?, ?)",
-        (docid, f"{collection}/{path}", tokenize_text(title or ""), tokenize_text(body)),
+        (
+            docid,
+            f"{collection}/{path}",
+            tokenize_text(title or ""),
+            tokenize_text(body),
+        ),
     )
     return docid
 
@@ -209,21 +253,40 @@ def _insert_morph(conn, collection, path, title, body):
 def hybrid_conn(conn, doc_dir):
     """trigram + morph 両方構築済みの接続。"""
     add_collection(conn, "test", str(doc_dir))
-    upsert_document(conn, collection="test", path="a.md",
-                    body="形態素解析は日本語の自然言語処理の基礎技術です",
-                    title="形態素解析について", mtime=1000)
-    upsert_document(conn, collection="test", path="b.md",
-                    body="検索エンジンの仕組みと実装方法を解説します",
-                    title="検索エンジン入門", mtime=1001)
-    upsert_document(conn, collection="test", path="c.md",
-                    body="サーバーの設定と運用について説明します",
-                    title="サーバー運用ガイド", mtime=1002)
+    upsert_document(
+        conn,
+        collection="test",
+        path="a.md",
+        body="形態素解析は日本語の自然言語処理の基礎技術です",
+        title="形態素解析について",
+        mtime=1000,
+    )
+    upsert_document(
+        conn,
+        collection="test",
+        path="b.md",
+        body="検索エンジンの仕組みと実装方法を解説します",
+        title="検索エンジン入門",
+        mtime=1001,
+    )
+    upsert_document(
+        conn,
+        collection="test",
+        path="c.md",
+        body="サーバーの設定と運用について説明します",
+        title="サーバー運用ガイド",
+        mtime=1002,
+    )
     conn.commit()
     set_meta(conn, "trigram_indexed", "1")
 
     # morph FTS に投入
     for path, title, body in [
-        ("a.md", "形態素解析について", "形態素解析は日本語の自然言語処理の基礎技術です"),
+        (
+            "a.md",
+            "形態素解析について",
+            "形態素解析は日本語の自然言語処理の基礎技術です",
+        ),
         ("b.md", "検索エンジン入門", "検索エンジンの仕組みと実装方法を解説します"),
         ("c.md", "サーバー運用ガイド", "サーバーの設定と運用について説明します"),
     ]:

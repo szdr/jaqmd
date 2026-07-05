@@ -33,13 +33,12 @@ def _minmax_scale(results: list[SearchResult]) -> list[SearchResult]:
         # 全件同スコア（1件のみ含む）はゼロ除算を避けて全件 1.0
         return [dataclasses.replace(r, score=1.0) for r in results]
     span = hi - lo
-    return [
-        dataclasses.replace(r, score=(r.score - lo) / span)
-        for r in results
-    ]
+    return [dataclasses.replace(r, score=(r.score - lo) / span) for r in results]
 
 
-def _rrf_fuse(result_lists: list[list[SearchResult]], k: int = RRF_K) -> list[SearchResult]:
+def _rrf_fuse(
+    result_lists: list[list[SearchResult]], k: int = RRF_K
+) -> list[SearchResult]:
     """Reciprocal Rank Fusion で複数の検索結果リストを融合する。
 
     各リストの rank（0始まり）位置の結果に 1/(k + rank + 1) を加算する。
@@ -107,8 +106,11 @@ def query(
 
     # trigram は常に実行
     tri_results = trisearch(
-        conn, query_text,
-        n=candidate_n, collection=collection, all_results=True,
+        conn,
+        query_text,
+        n=candidate_n,
+        collection=collection,
+        all_results=True,
         reporter=reporter,
     )
     result_lists.append(tri_results)
@@ -116,9 +118,13 @@ def query(
     # morph: morph_indexed が立っているときのみ
     if get_meta(conn, "morph_indexed") == "1":
         from .mosearch import mosearch
+
         mo_results = mosearch(
-            conn, query_text,
-            n=candidate_n, collection=collection, all_results=True,
+            conn,
+            query_text,
+            n=candidate_n,
+            collection=collection,
+            all_results=True,
             reporter=reporter,
         )
         result_lists.append(mo_results)
@@ -126,9 +132,13 @@ def query(
     # vector: vec_indexed が立っているときのみ
     if get_meta(conn, "vec_indexed") == "1":
         from .vsearch import vsearch
+
         vs_results = vsearch(
-            conn, query_text,
-            n=candidate_n, collection=collection, all_results=True,
+            conn,
+            query_text,
+            n=candidate_n,
+            collection=collection,
+            all_results=True,
             reporter=reporter,
         )
         result_lists.append(vs_results)
@@ -137,7 +147,9 @@ def query(
 
     # reranker（融合プール全体に適用してから n 制限する。--all 時は全件を再スコア）
     top_k = None if all_results else RERANK_TOP_K
-    fused = rerank(query_text, fused, enabled=rerank_enabled, top_k=top_k, reporter=reporter)
+    fused = rerank(
+        query_text, fused, enabled=rerank_enabled, top_k=top_k, reporter=reporter
+    )
 
     fused = _minmax_scale(fused)
 

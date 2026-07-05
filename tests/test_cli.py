@@ -12,7 +12,9 @@ def test_collection_add(tmp_cache, doc_dir):
 
 
 def test_collection_add_nonexistent(tmp_cache):
-    result = runner.invoke(app, ["collection", "add", "/no/such/path/xyz", "--name", "test"])
+    result = runner.invoke(
+        app, ["collection", "add", "/no/such/path/xyz", "--name", "test"]
+    )
     assert result.exit_code != 0
 
 
@@ -40,7 +42,9 @@ def test_update_empty_collection(tmp_cache, doc_dir):
 
 
 def test_update_with_files(tmp_cache, doc_dir):
-    (doc_dir / "a.md").write_text("# 形態素解析\n日本語の自然言語処理について説明します。")
+    (doc_dir / "a.md").write_text(
+        "# 形態素解析\n日本語の自然言語処理について説明します。"
+    )
     (doc_dir / "b.md").write_text("# 検索エンジン\n検索エンジンの仕組みを解説します。")
     runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
     result = runner.invoke(app, ["update"])
@@ -73,7 +77,10 @@ def test_search_no_results(tmp_cache, doc_dir):
 
 def test_search_json_output(tmp_cache, doc_dir):
     import json
-    (doc_dir / "a.md").write_text("# 形態素解析\n日本語処理の基礎技術について詳しく解説します。")
+
+    (doc_dir / "a.md").write_text(
+        "# 形態素解析\n日本語処理の基礎技術について詳しく解説します。"
+    )
     runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
     runner.invoke(app, ["update"])
     result = runner.invoke(app, ["search", "形態素解析", "--json"])
@@ -88,6 +95,7 @@ def test_get_command(tmp_cache, doc_dir):
     runner.invoke(app, ["update"])
 
     from jaqmd.store import connect
+
     conn = connect()
     row = conn.execute("SELECT docid FROM documents WHERE active=1 LIMIT 1").fetchone()
     docid = row["docid"]
@@ -141,7 +149,9 @@ def test_morph_requires_trigram_index(tmp_cache, doc_dir):
 def test_morph_builds_index(tmp_cache, doc_dir):
     """update 後に morph が成功し、完了メッセージを出力する。"""
     pytest.importorskip("sudachipy")
-    (doc_dir / "a.md").write_text("# サーバー設定\nサーバーの設定と運用について説明します。")
+    (doc_dir / "a.md").write_text(
+        "# サーバー設定\nサーバーの設定と運用について説明します。"
+    )
     runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
     runner.invoke(app, ["update"])
     result = runner.invoke(app, ["morph"])
@@ -180,7 +190,9 @@ def test_mosearch_without_morph_index(tmp_cache, doc_dir):
 def test_mosearch_with_results(tmp_cache, doc_dir):
     """morph 実行後に mosearch が成功する。"""
     pytest.importorskip("sudachipy")
-    (doc_dir / "a.md").write_text("# サーバー設定\nサーバーの設定と運用について詳しく説明します。")
+    (doc_dir / "a.md").write_text(
+        "# サーバー設定\nサーバーの設定と運用について詳しく説明します。"
+    )
     runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
     runner.invoke(app, ["update"])
     runner.invoke(app, ["morph"])
@@ -192,7 +204,9 @@ def test_mosearch_with_results(tmp_cache, doc_dir):
 def test_mosearch_server_variant(tmp_cache, doc_dir):
     """サーバ と サーバー で同じ文書がヒットする（形態素正規化）。"""
     pytest.importorskip("sudachipy")
-    (doc_dir / "a.md").write_text("# サーバー設定\nサーバーの設定と運用について詳しく説明します。")
+    (doc_dir / "a.md").write_text(
+        "# サーバー設定\nサーバーの設定と運用について詳しく説明します。"
+    )
     runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
     runner.invoke(app, ["update"])
     runner.invoke(app, ["morph"])
@@ -247,7 +261,10 @@ def test_query_no_results(tmp_cache, doc_dir):
 def test_query_json_output(tmp_cache, doc_dir):
     """--json で有効な JSON が返る。"""
     import json
-    (doc_dir / "a.md").write_text("# 形態素解析\n日本語処理の基礎技術について詳しく解説します。")
+
+    (doc_dir / "a.md").write_text(
+        "# 形態素解析\n日本語処理の基礎技術について詳しく解説します。"
+    )
     runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
     runner.invoke(app, ["update"])
     result = runner.invoke(app, ["query", "形態素解析", "--json"])

@@ -1,4 +1,5 @@
 """extract_snippet の単体テスト（埋め込み不要・高速）。"""
+
 from __future__ import annotations
 
 import pytest
@@ -9,6 +10,7 @@ from jaqmd.search.snippet import extract_snippet
 # ---------------------------------------------------------------------------
 # 基本
 # ---------------------------------------------------------------------------
+
 
 def test_short_text_returned_as_is():
     """max_chars 以下のテキストはそのまま返す。"""

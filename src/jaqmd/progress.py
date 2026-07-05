@@ -1,18 +1,57 @@
 from __future__ import annotations
 
 import sys
-import threading
-import time
 from contextlib import contextmanager
 from typing import Callable, Iterator, Optional
 
-_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-_TICK_SECONDS = 0.1
+from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    ProgressColumn,
+    SpinnerColumn,
+    Task,
+    TaskProgressColumn,
+    TextColumn,
+)
+from rich.text import Text
+
 _BAR_WIDTH = 24
 
 
+class _ElapsedColumn(ProgressColumn):
+    """経過秒を "(12.3s)" 形式で表示する。"""
+
+    def render(self, task: Task) -> Text:
+        elapsed = task.finished_time if task.finished else task.elapsed
+        return Text(f"({elapsed or 0.0:.1f}s)")
+
+
+class _CountColumn(ProgressColumn):
+    """総数不明時の走行カウンタ表示 "12 件"。"""
+
+    def render(self, task: Task) -> Text:
+        return Text(f"{int(task.completed)} 件")
+
+
+def _columns(*, with_bar: bool, with_count: bool) -> tuple:
+    """全コマンド共通の列構成: スピナー＋説明＋(バー or 件数)＋経過秒。"""
+    columns: list = [SpinnerColumn(), TextColumn("{task.description}...")]
+    if with_bar:
+        columns += [
+            BarColumn(bar_width=_BAR_WIDTH),
+            MofNCompleteColumn(),
+            TaskProgressColumn(),
+        ]
+    elif with_count:
+        columns.append(_CountColumn())
+    columns.append(_ElapsedColumn())
+    return tuple(columns)
+
+
 class ProgressReporter:
-    """検索処理の進捗を stderr にスピナー＋経過秒で表示する。
+    """処理の進捗を stderr に rich.progress で表示する。
 
     enabled=False の場合は何も出力しない（デフォルトのフォールバック）。
     """
@@ -27,29 +66,14 @@ class ProgressReporter:
             yield
             return
 
-        stop = threading.Event()
-        start = time.monotonic()
-
-        def _spin() -> None:
-            i = 0
-            while not stop.is_set():
-                elapsed = time.monotonic() - start
-                frame = _SPINNER_FRAMES[i % len(_SPINNER_FRAMES)]
-                sys.stderr.write(f"\r{frame} {label}... ({elapsed:.1f}s)")
-                sys.stderr.flush()
-                i += 1
-                stop.wait(_TICK_SECONDS)
-
-        thread = threading.Thread(target=_spin, daemon=True)
-        thread.start()
-        try:
+        console = Console(file=sys.stderr)
+        with Progress(
+            *_columns(with_bar=False, with_count=False),
+            console=console,
+            transient=False,
+        ) as progress:
+            progress.add_task(label)
             yield
-        finally:
-            stop.set()
-            thread.join()
-            elapsed = time.monotonic() - start
-            sys.stderr.write(f"\r\x1b[2K{label}... ({elapsed:.1f}s)\n")
-            sys.stderr.flush()
 
     @contextmanager
     def track(
@@ -62,51 +86,23 @@ class ProgressReporter:
         total が None（総数不明）の場合は走行カウンタのみを表示する。
         """
         if not self.enabled:
+
             def _noop(step: int = 1) -> None:
                 return None
 
             yield _noop
             return
 
-        stop = threading.Event()
-        start = time.monotonic()
-        lock = threading.Lock()
-        done = 0
+        console = Console(file=sys.stderr)
+        columns = _columns(with_bar=bool(total), with_count=not total)
 
-        def _advance(step: int = 1) -> None:
-            nonlocal done
-            with lock:
-                done += step
+        with Progress(*columns, console=console, transient=False) as progress:
+            task_id = progress.add_task(label, total=total)
 
-        def _render() -> str:
-            with lock:
-                current = done
-            elapsed = time.monotonic() - start
-            if total:
-                pct = min(current / total, 1.0)
-                filled = int(_BAR_WIDTH * pct)
-                bar = "#" * filled + "-" * (_BAR_WIDTH - filled)
-                return f"{label}... [{bar}] {current}/{total} ({pct:.0%}) ({elapsed:.1f}s)"
-            return f"{label}... {current} 件 ({elapsed:.1f}s)"
+            def _advance(step: int = 1) -> None:
+                progress.advance(task_id, step)
 
-        def _spin() -> None:
-            i = 0
-            while not stop.is_set():
-                frame = _SPINNER_FRAMES[i % len(_SPINNER_FRAMES)]
-                sys.stderr.write(f"\r\x1b[2K{frame} {_render()}")
-                sys.stderr.flush()
-                i += 1
-                stop.wait(_TICK_SECONDS)
-
-        thread = threading.Thread(target=_spin, daemon=True)
-        thread.start()
-        try:
             yield _advance
-        finally:
-            stop.set()
-            thread.join()
-            sys.stderr.write(f"\r\x1b[2K{_render()}\n")
-            sys.stderr.flush()
 
 
 NULL_REPORTER = ProgressReporter(enabled=False)

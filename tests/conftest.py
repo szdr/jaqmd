@@ -23,6 +23,7 @@ def tmp_cache(tmp_path, monkeypatch):
 @pytest.fixture
 def conn(tmp_cache):
     from jaqmd.store import connect
+
     return connect()
 
 
