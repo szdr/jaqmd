@@ -170,6 +170,60 @@ def test_morph_is_idempotent(tmp_cache, doc_dir):
     assert result.exit_code == 0
 
 
+def test_morph_incremental_add(tmp_cache, doc_dir):
+    """update で新規ファイルを追加した後、morph は差分（新規分）のみ処理する。"""
+    pytest.importorskip("sudachipy")
+    (doc_dir / "a.md").write_text("# テスト\n最初のドキュメントです。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    runner.invoke(app, ["morph"])
+
+    (doc_dir / "b.md").write_text(
+        "# サーバー追加\nサーバーの新しいドキュメントを追加しました。"
+    )
+    runner.invoke(app, ["update"])
+    result = runner.invoke(app, ["morph"])
+    assert result.exit_code == 0
+    assert "1" in result.output
+
+    search_result = runner.invoke(app, ["mosearch", "サーバ"])
+    assert search_result.exit_code == 0
+    assert "b.md" in search_result.output
+
+
+def test_morph_incremental_update(tmp_cache, doc_dir):
+    """ファイル内容を更新した後、morph で新しい内容が検索できる。"""
+    pytest.importorskip("sudachipy")
+    (doc_dir / "a.md").write_text("# テスト\n古い内容のドキュメントです。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    runner.invoke(app, ["morph"])
+
+    (doc_dir / "a.md").write_text(
+        "# テスト\nデータベース移行についての新しい内容です。"
+    )
+    runner.invoke(app, ["update"])
+    result = runner.invoke(app, ["morph"])
+    assert result.exit_code == 0
+
+    search_result = runner.invoke(app, ["mosearch", "データベース"])
+    assert search_result.exit_code == 0
+    assert "a.md" in search_result.output
+
+
+def test_morph_force_rebuild(tmp_cache, doc_dir):
+    """--force で全再構築しても成功する。"""
+    pytest.importorskip("sudachipy")
+    (doc_dir / "a.md").write_text("# テスト\n内容です。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    runner.invoke(app, ["morph"])
+
+    result = runner.invoke(app, ["morph", "--force"])
+    assert result.exit_code == 0
+    assert "完了" in result.output
+
+
 def test_embed_requires_trigram_index(tmp_cache):
     """trigram インデックスなしでは embed が失敗し update を案内する。"""
     result = runner.invoke(app, ["embed"])

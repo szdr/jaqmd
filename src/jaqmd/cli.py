@@ -424,6 +424,9 @@ def cleanup() -> None:
 
 @app.command()
 def morph(
+    force: bool = typer.Option(
+        False, "-f", "--force", help="既存インデックスを削除して全再構築"
+    ),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
@@ -450,29 +453,47 @@ def morph(
         typer.echo(f"エラー: コレクションが見つかりません: {collection}", err=True)
         raise typer.Exit(1)
 
-    typer.echo("形態素インデックスを構築中...")
+    if force:
+        if collection:
+            typer.echo(
+                f"既存インデックスを削除して再構築します（コレクション: {collection}）..."
+            )
+            conn.execute(
+                """DELETE FROM docs_fts_morph WHERE docid IN (
+                       SELECT docid FROM documents WHERE collection = ?
+                   )""",
+                (collection,),
+            )
+        else:
+            typer.echo("既存インデックスを削除して全再構築します...")
+            conn.execute("DELETE FROM docs_fts_morph")
+        conn.commit()
 
-    # 既存エントリを削除してから再投入（冪等）
+    # 差分: docs_fts_morph に未登録の active ドキュメントのみ処理
     if collection:
-        conn.execute(
-            """DELETE FROM docs_fts_morph WHERE docid IN (
-                   SELECT docid FROM documents WHERE collection = ?
-               )""",
-            (collection,),
-        )
         rows = conn.execute(
             """SELECT d.docid, d.collection, d.path, d.title, c.body
                FROM documents d JOIN content c ON d.hash = c.hash
-               WHERE d.active = 1 AND d.collection = ?""",
+               LEFT JOIN docs_fts_morph m ON m.docid = d.docid
+               WHERE d.active = 1 AND m.docid IS NULL AND d.collection = ?""",
             (collection,),
         ).fetchall()
     else:
-        conn.execute("DELETE FROM docs_fts_morph")
         rows = conn.execute(
             """SELECT d.docid, d.collection, d.path, d.title, c.body
                FROM documents d JOIN content c ON d.hash = c.hash
-               WHERE d.active = 1"""
+               LEFT JOIN docs_fts_morph m ON m.docid = d.docid
+               WHERE d.active = 1 AND m.docid IS NULL"""
         ).fetchall()
+
+    if not rows:
+        typer.echo("新しく形態素インデックスに追加するドキュメントはありません。")
+        set_meta(conn, "morph_indexed", "1")
+        set_meta(conn, "morph_tokenizer", "sudachipy/normalized_form")
+        conn.commit()
+        return
+
+    typer.echo(f"形態素インデックスを構築中... ({len(rows)} 件)")
 
     with reporter.track("形態素インデックス構築", len(rows)) as advance:
         for row in rows:
