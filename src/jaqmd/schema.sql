@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS chunk_vectors (
 );
 CREATE INDEX IF NOT EXISTS idx_chunk_vectors_docid ON chunk_vectors(docid);
 
--- Query Expansion キャッシュ（枠のみ、QE 本体は jaqmd-qe で実装予定）
+-- Query Expansion キャッシュ（qe.py が szdr/jaqmd-qe-gemma-4-e2b-it の展開結果を保存）
 CREATE TABLE IF NOT EXISTS qe_cache (
     query_hash TEXT PRIMARY KEY,
     query_raw  TEXT NOT NULL,

@@ -105,7 +105,7 @@ ONNX 不要・追加依存は `sudachipy` + `sudachidict-core`（`pyproject.toml
 
 ---
 
-## Phase C: ハイブリッド検索（query）✅ 完了（RRF最小完結）
+## Phase C: ハイブリッド検索（query）✅ 完了
 
 ### 作業単位 C-1: RRF 融合 + query ロジック ✅
 - `src/jaqmd/search/query.py` 実装済み。`_rrf_fuse(k=60)` で trigram/morph/vec の結果を融合。`get_meta` で利用可能インデックスを動的判定し、morph/vec 未構築でも trigram 単独で degrade 動作する。
@@ -114,15 +114,17 @@ ONNX 不要・追加依存は `sudachipy` + `sudachidict-core`（`pyproject.toml
 ### 作業単位 C-2: ruri-reranker ラッパー ✅ 本実装完了
 - `src/jaqmd/rerank.py`: fastembed `TextCrossEncoder` + カスタムモデル登録（`szdr/ruri-v3-reranker-310m-onnx`）で ruri-v3-reranker-310m を統合。`query()` は RRF 融合プール全体（`--all` 以外は上位 `RERANK_TOP_K=50`）に対して cross-encoder でリスコアしてから n 制限する。fastembed 未導入・モデルロード失敗時は恒等フォールバックで degrade。`jaqmd query --no-rerank` で明示的に無効化可能。
 
-### 作業単位 C-3: Query Expansion（枠のみ実装）
-- `schema.sql` に `qe_cache` テーブルを追記済み（`CREATE TABLE IF NOT EXISTS`）。接続時に自動作成される。QE ロジック本体は**別タスク（`jaqmd-qe` リポジトリ）・未着手**。現状は raw クエリをそのまま使用。
+### 作業単位 C-3: Query Expansion ✅ 本実装完了
+- `src/jaqmd/qe.py`: [`szdr/jaqmd-qe-gemma-4-e2b-it`](https://huggingface.co/szdr/jaqmd-qe-gemma-4-e2b-it)（Gemma 4 E2B LoRA, GGUF）を llama-cpp-python で統合。クエリを `{"lex":[...],"vec":"...","hyde":"..."}` の JSON に展開する。`rerank.py` と同じ遅延ロード＋グレースフル degrade パターン（未導入・ロード失敗・応答パース失敗時は `None` を返し raw クエリにフォールバック）。
+- `qe_cache`（`schema.sql` に追記済み）を `store.get_qe_cache`/`set_qe_cache` 経由で活用し、TTL 内は再推論しない。
+- `search/query.py`: `qe_enabled` 引数を追加し、`lex` を trigram/mosearch へ、`vec` を vsearch へ、`hyde` を追加の vsearch（HyDE）へ配線。RRF 融合対象リストが増える。reranker は元の raw クエリで実行（展開文では行わない）。
+- `cli.py query` に `--no-qe` を追加（`--no-rerank` と同様のパターン）。
+- `pyproject.toml` に optional extra `[qe]`（`llama-cpp-python`, `huggingface-hub`）を追加。
+- `tests/test_qe.py`（JSON抽出・キャッシュ miss/hit・degrade 経路）、`tests/test_query.py`（QE 配線の統合テスト）、`tests/test_cli.py`（`--no-qe`）を追加。全テスト緑。
 
 ### 作業単位 C-4: `jaqmd query` CLI + テスト ✅
 - `cli.py` のスタブを置換済み。`mosearch`/`vsearch` と同一の10オプション（`-n/-c/--min-score/--all/--full/--json/--md/--xml/--files`）を備え、`_run_search(search_fn=do_query)` に集約。
 - `tests/test_query.py` 新設（`_rrf_fuse` ユニットテスト6件 + query 統合テスト11件）、`tests/test_cli.py` に query テスト4件追加。全134テスト緑。
-
-### 残タスク（別イテレーション）
-- C-3 本実装: `jaqmd-qe` による Query Expansion ロジックと `qe_cache` 配線
 
 ---
 

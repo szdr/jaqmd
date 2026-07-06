@@ -227,6 +227,44 @@ def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
+# --- qe_cache ---
+
+
+def get_qe_cache(
+    conn: sqlite3.Connection, query_hash: str, model_id: str
+) -> Optional[sqlite3.Row]:
+    """有効期限内（created_at + ttl > now）の QE キャッシュを取得する。"""
+    return conn.execute(
+        """SELECT * FROM qe_cache
+           WHERE query_hash = ? AND model_id = ?
+             AND (created_at + ttl) > unixepoch()""",
+        (query_hash, model_id),
+    ).fetchone()
+
+
+def set_qe_cache(
+    conn: sqlite3.Connection,
+    query_hash: str,
+    query_raw: str,
+    lex_query: Optional[str],
+    vec_query: Optional[str],
+    hyde_text: Optional[str],
+    model_id: str,
+) -> None:
+    conn.execute(
+        """INSERT INTO qe_cache(query_hash, query_raw, lex_query, vec_query, hyde_text, model_id, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+           ON CONFLICT(query_hash) DO UPDATE SET
+               query_raw  = excluded.query_raw,
+               lex_query  = excluded.lex_query,
+               vec_query  = excluded.vec_query,
+               hyde_text  = excluded.hyde_text,
+               model_id   = excluded.model_id,
+               created_at = excluded.created_at""",
+        (query_hash, query_raw, lex_query, vec_query, hyde_text, model_id),
+    )
+
+
 def get_stats(conn: sqlite3.Connection) -> dict:
     total = conn.execute("SELECT COUNT(*) FROM documents WHERE active = 1").fetchone()[
         0

@@ -31,27 +31,30 @@
 |------|--------|--------|-----------|
 | Embedding | `cl-nagoya/ruri-v3-310m` | 名古屋大学 | Apache-2.0 |
 | Reranker | `cl-nagoya/ruri-v3-reranker-310m` | 名古屋大学 | Apache-2.0 |
-| Query Expansion | jaqmd 独自開発（予定） | jaqmd | - |
+| Query Expansion | `szdr/jaqmd-qe-gemma-4-e2b-it`（Gemma 4 E2B LoRA） | jaqmd | - |
 
-いずれも ONNX 形式で fastembed 経由で読み込みます。
+Embedding・Reranker は ONNX 形式で fastembed 経由、Query Expansion は GGUF 形式で llama-cpp-python 経由で読み込みます。
 
 ## インストール
 
 ```bash
 # 最小構成（trigram検索のみ）
-pip install jaqmd
+uv tool install jaqmd
 
 # 形態素解析を使う場合
-pip install "jaqmd[morph]"
+uv tool install "jaqmd[morph]"
 
 # ベクトル検索を使う場合
-pip install "jaqmd[vector]"
+uv tool install "jaqmd[vector]"
+
+# Query Expansion を使う場合
+uv tool install "jaqmd[qe]"
 
 # すべての機能
-pip install "jaqmd[all]"
+uv tool install "jaqmd[all]"
 ```
 
-> 注: ベクトル検索・リランクで使用する ONNX モデルは初回実行時に Hugging Face から自動ダウンロードされ、`~/.cache/jaqmd/models/` にキャッシュされます。
+> 注: ベクトル検索・リランク・Query Expansion で使用するモデルは初回実行時に Hugging Face から自動ダウンロードされ、`~/.cache/jaqmd/models/` にキャッシュされます（Query Expansion モデルは GGUF 形式で約3.4GB）。
 
 ## クイックスタート
 
@@ -123,6 +126,7 @@ jaqmd query "日本語の検索エンジンを作りたい"
 --xml             XML 形式で出力
 --files           docid,score,filepath,context 形式で出力
 --no-rerank       （query のみ）ruri-reranker を無効化し RRF 順のまま返す
+--no-qe           （query のみ）Query Expansion を無効化し raw クエリのまま検索する
 ```
 
 ## 検索方式の使い分け
@@ -147,6 +151,7 @@ query "クエリ"
 ```
 
 morph や embed が未実行でも `query` は動作します（その分、検索品質は段階的に向上します）。
+`jaqmd[qe]` 未導入時も Query Expansion なし（raw クエリのみ）で degrade して動作します。
 
 ## 状態確認
 

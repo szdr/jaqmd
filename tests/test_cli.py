@@ -337,6 +337,16 @@ def test_query_no_rerank(tmp_cache, doc_dir):
     assert len(result.output.strip()) > 0
 
 
+def test_query_no_qe(tmp_cache, doc_dir):
+    """--no-qe でも query が成功する（Query Expansion を無効化）。"""
+    (doc_dir / "a.md").write_text("# 形態素解析\n日本語の形態素解析の詳細な解説です。")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+    result = runner.invoke(app, ["query", "形態素解析", "--no-qe"])
+    assert result.exit_code == 0
+    assert len(result.output.strip()) > 0
+
+
 def test_vsearch_unimplemented(tmp_cache):
     result = runner.invoke(app, ["vsearch", "テスト"])
     assert result.exit_code != 0

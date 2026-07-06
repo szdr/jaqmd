@@ -316,3 +316,71 @@ def test_query_hybrid_no_duplicate_docids(hybrid_conn):
     results = query(hybrid_conn, "す", all_results=True)
     docids = [r.docid for r in results]
     assert len(docids) == len(set(docids))
+
+
+# ---------------------------------------------------------------------------
+# query 統合テスト: Query Expansion 配線
+# ---------------------------------------------------------------------------
+
+
+def test_query_qe_disabled_matches_raw_query(trigram_conn, monkeypatch):
+    """qe_enabled=False では qe.expand が呼ばれず raw クエリのみで検索する。"""
+    calls = []
+    monkeypatch.setattr(
+        "jaqmd.search.query.qe_expand",
+        lambda *a, **k: calls.append(1) or None,
+    )
+    query(trigram_conn, "形態素解析", qe_enabled=False)
+    assert calls == []
+
+
+def test_query_qe_none_degrades_to_raw_query(trigram_conn, monkeypatch):
+    """qe.expand が None を返す（未導入/失敗）場合、raw クエリの結果と一致する。"""
+    monkeypatch.setattr("jaqmd.search.query.qe_expand", lambda *a, **k: None)
+    with_qe = query(trigram_conn, "形態素解析", qe_enabled=True)
+    without_qe = query(trigram_conn, "形態素解析", qe_enabled=False)
+    assert [r.docid for r in with_qe] == [r.docid for r in without_qe]
+
+
+def test_query_qe_lex_expansion_reaches_trigram(trigram_conn, monkeypatch):
+    """lex 展開語が trigram 検索に渡り、raw クエリ単独では拾えない文書もヒットする。"""
+    from jaqmd.qe import ExpansionResult
+
+    monkeypatch.setattr(
+        "jaqmd.search.query.qe_expand",
+        lambda *a, **k: ExpansionResult(
+            lex=["サーバー設定"], vec="サーバーの設定について", hyde=""
+        ),
+    )
+    results = query(trigram_conn, "XYZNONEXISTENT999ZZZZZ")
+    assert any("c.md" in r.filepath for r in results)
+
+
+def test_query_qe_vec_expansion_used_for_vsearch(hybrid_conn, monkeypatch):
+    """vec 展開文が vsearch に渡されることを確認する（vsearch 呼び出し引数を検証）。"""
+    from jaqmd.qe import ExpansionResult
+    from jaqmd.store import set_meta
+
+    set_meta(hybrid_conn, "vec_indexed", "1")
+    hybrid_conn.commit()
+
+    monkeypatch.setattr(
+        "jaqmd.search.query.qe_expand",
+        lambda *a, **k: ExpansionResult(
+            lex=[], vec="展開されたベクトルクエリ", hyde="仮想文書テキスト"
+        ),
+    )
+
+    captured_queries = []
+
+    def _fake_vsearch(conn, q, **kwargs):
+        captured_queries.append(q)
+        return []
+
+    # vsearch は query() 内で `from .vsearch import vsearch` と遅延 import されるため、
+    # 呼び出し時に解決される実体側（jaqmd.search.vsearch モジュール）をパッチする。
+    monkeypatch.setattr("jaqmd.search.vsearch.vsearch", _fake_vsearch)
+
+    query(hybrid_conn, "元のクエリ")
+    assert "展開されたベクトルクエリ" in captured_queries
+    assert "仮想文書テキスト" in captured_queries

@@ -7,6 +7,7 @@ from typing import Optional
 from .trisearch import SearchResult, trisearch
 from ..store import get_meta
 from ..rerank import rerank, RERANK_TOP_K
+from ..qe import expand as qe_expand
 from ..progress import NULL_REPORTER, ProgressReporter
 
 # AGENTS.md 準拠: RRF パラメータ k=60
@@ -79,6 +80,7 @@ def query(
     min_score: Optional[float] = None,
     all_results: bool = False,
     rerank_enabled: bool = True,
+    qe_enabled: bool = True,
     reporter: Optional[ProgressReporter] = None,
 ) -> list[SearchResult]:
     """ハイブリッド検索: RRF 融合による trigram / morph / vector 統合検索。
@@ -94,6 +96,7 @@ def query(
         min_score: RRF スコアの最小閾値（None で足切りなし）。
         all_results: True なら全件返却（n・min_score は適用しない）。
         rerank_enabled: False なら reranker を無効化（RRF 順のまま）。
+        qe_enabled: False なら Query Expansion を無効化（raw クエリのみ使用）。
         reporter: 進捗表示用の ProgressReporter（None なら無効）。
 
     Returns:
@@ -102,12 +105,18 @@ def query(
     reporter = reporter or NULL_REPORTER
     candidate_n = max(n * 5, 20)
 
+    # Query Expansion: lex/vec/hyde に展開する（未導入・失敗時は None で raw に degrade）
+    exp = qe_expand(conn, query_text, reporter=reporter) if qe_enabled else None
+    lex_query = " ".join([query_text, *exp.lex]) if exp else query_text
+    vec_query = exp.vec if exp and exp.vec else query_text
+    hyde_text = exp.hyde if exp and exp.hyde else None
+
     result_lists: list[list[SearchResult]] = []
 
-    # trigram は常に実行
+    # trigram は常に実行（lex 展開語を付加）
     tri_results = trisearch(
         conn,
-        query_text,
+        lex_query,
         n=candidate_n,
         collection=collection,
         all_results=True,
@@ -115,13 +124,13 @@ def query(
     )
     result_lists.append(tri_results)
 
-    # morph: morph_indexed が立っているときのみ
+    # morph: morph_indexed が立っているときのみ（lex 展開語を付加）
     if get_meta(conn, "morph_indexed") == "1":
         from .mosearch import mosearch
 
         mo_results = mosearch(
             conn,
-            query_text,
+            lex_query,
             n=candidate_n,
             collection=collection,
             all_results=True,
@@ -129,19 +138,31 @@ def query(
         )
         result_lists.append(mo_results)
 
-    # vector: vec_indexed が立っているときのみ
+    # vector: vec_indexed が立っているときのみ（vec 展開文で検索）
     if get_meta(conn, "vec_indexed") == "1":
         from .vsearch import vsearch
 
         vs_results = vsearch(
             conn,
-            query_text,
+            vec_query,
             n=candidate_n,
             collection=collection,
             all_results=True,
             reporter=reporter,
         )
         result_lists.append(vs_results)
+
+        # HyDE: 仮想文書が得られたときのみ追加のベクトル検索リストとして融合
+        if hyde_text:
+            hyde_results = vsearch(
+                conn,
+                hyde_text,
+                n=candidate_n,
+                collection=collection,
+                all_results=True,
+                reporter=reporter,
+            )
+            result_lists.append(hyde_results)
 
     fused = _rrf_fuse(result_lists, k=RRF_K)
 

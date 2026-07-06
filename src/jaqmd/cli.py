@@ -767,6 +767,7 @@ def query(
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
     no_rerank: bool = typer.Option(False, "--no-rerank", help="reranker を無効化"),
+    no_qe: bool = typer.Option(False, "--no-qe", help="Query Expansion を無効化"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
 ) -> None:
     """ハイブリッド検索（RRF 融合: trigram / morph / vector）。"""
@@ -788,7 +789,7 @@ def query(
             "エラー: trigram インデックスが構築されていません。\n"
             "→ `jaqmd update` を実行してください。"
         ),
-        search_kwargs={"rerank_enabled": not no_rerank},
+        search_kwargs={"rerank_enabled": not no_rerank, "qe_enabled": not no_qe},
     )
 
 
