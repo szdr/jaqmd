@@ -164,6 +164,15 @@ def update(
 # ---------------------------------------------------------------------------
 
 
+def _format_expansion(exp) -> str:
+    """Query Expansion 結果（ExpansionResult）を stderr 表示用に整形する。"""
+    lines = ["[Query Expansion]"]
+    lines.append(f"  lex:  {exp.lex}")
+    lines.append(f"  vec:  {exp.vec}")
+    lines.append(f"  hyde: {exp.hyde}")
+    return "\n".join(lines)
+
+
 def _run_search(
     query: str,
     *,
@@ -184,6 +193,7 @@ def _run_search(
         "→ `jaqmd update` を実行してください。"
     ),
     search_kwargs: Optional[dict] = None,
+    collect_qe: bool = False,
 ) -> None:
     conn = connect()
     if get_meta(conn, meta_key) != "1":
@@ -192,7 +202,14 @@ def _run_search(
 
     reporter = ProgressReporter(enabled=sys.stderr.isatty() and not quiet)
 
+    def _emit_expansion(exp) -> None:
+        if not quiet and exp is not None:
+            typer.echo(_format_expansion(exp), err=True)
+
     fn = search_fn or do_trisearch
+    kwargs = dict(search_kwargs or {})
+    if collect_qe:
+        kwargs["on_expansion"] = _emit_expansion
     results = fn(
         conn,
         query,
@@ -201,7 +218,7 @@ def _run_search(
         min_score=min_score,
         all_results=all_results,
         reporter=reporter,
-        **(search_kwargs or {}),
+        **kwargs,
     )
 
     fmt = "default"
@@ -790,6 +807,7 @@ def query(
             "→ `jaqmd update` を実行してください。"
         ),
         search_kwargs={"rerank_enabled": not no_rerank, "qe_enabled": not no_qe},
+        collect_qe=True,
     )
 
 

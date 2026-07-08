@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import dataclasses
 import sqlite3
-from typing import Optional
+from typing import Callable, Optional
 
 from .trisearch import SearchResult, trisearch
 from ..store import get_meta
 from ..rerank import rerank, RERANK_TOP_K
-from ..qe import expand as qe_expand
+from ..qe import expand as qe_expand, ExpansionResult
 from ..progress import NULL_REPORTER, ProgressReporter
 
 # AGENTS.md 準拠: RRF パラメータ k=60
@@ -82,6 +82,7 @@ def query(
     rerank_enabled: bool = True,
     qe_enabled: bool = True,
     reporter: Optional[ProgressReporter] = None,
+    on_expansion: Optional[Callable[[Optional[ExpansionResult]], None]] = None,
 ) -> list[SearchResult]:
     """ハイブリッド検索: RRF 融合による trigram / morph / vector 統合検索。
 
@@ -98,6 +99,9 @@ def query(
         rerank_enabled: False なら reranker を無効化（RRF 順のまま）。
         qe_enabled: False なら Query Expansion を無効化（raw クエリのみ使用）。
         reporter: 進捗表示用の ProgressReporter（None なら無効）。
+        on_expansion: 指定すると Query Expansion 完了直後（trigram/morph/vector
+            検索の実行前）に、結果（ExpansionResult か None）を引数に1度だけ呼ばれる。
+            呼び出し側が展開結果を即座に表示する等に利用する。
 
     Returns:
         RRF 融合 + rerank 後の SearchResult リスト（スコア降順）。
@@ -107,6 +111,8 @@ def query(
 
     # Query Expansion: lex/vec/hyde に展開する（未導入・失敗時は None で raw に degrade）
     exp = qe_expand(conn, query_text, reporter=reporter) if qe_enabled else None
+    if on_expansion is not None:
+        on_expansion(exp)
     lex_query = " ".join([query_text, *exp.lex]) if exp else query_text
     vec_query = exp.vec if exp and exp.vec else query_text
     hyde_text = exp.hyde if exp and exp.hyde else None
