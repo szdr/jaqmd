@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import sys
+import warnings
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -17,6 +20,26 @@ QE_MODEL_ID = QE_MODEL_REPO  # qe_cache.model_id に記録する識別子
 
 _llm = None
 _llm_load_attempted = False
+
+
+@contextmanager
+def _suppress_native_stderr():
+    """llama.cpp のネイティブコードが fd レベルで stderr に吐くログを抑制する。"""
+    try:
+        stderr_fd = sys.stderr.fileno()
+    except (AttributeError, OSError, ValueError):
+        # 実 fd を持たない（テスト等でキャプチャされた）場合は何もしない
+        yield
+        return
+    saved = os.dup(stderr_fd)
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, stderr_fd)
+        yield
+    finally:
+        os.dup2(saved, stderr_fd)
+        os.close(devnull)
+        os.close(saved)
 
 
 @dataclass
@@ -52,13 +75,15 @@ def _get_llm():
     try:
         cache_dir = Path.home() / ".cache" / "jaqmd" / "models"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        _llm = Llama.from_pretrained(
-            repo_id=QE_MODEL_REPO,
-            filename=QE_MODEL_FILE,
-            cache_dir=str(cache_dir),
-            n_ctx=2048,
-            verbose=False,
-        )
+        with warnings.catch_warnings(), _suppress_native_stderr():
+            warnings.simplefilter("ignore")
+            _llm = Llama.from_pretrained(
+                repo_id=QE_MODEL_REPO,
+                filename=QE_MODEL_FILE,
+                cache_dir=str(cache_dir),
+                n_ctx=2048,
+                verbose=False,
+            )
     except Exception as e:
         print(
             f"警告: Query Expansion モデルのロードに失敗しました（{e}）。無効化して続行します。",
