@@ -58,3 +58,36 @@ def test_to_fts_query_quote_escape():
     """クォートを含む入力が安全にエスケープされる。"""
     result = to_fts_query('テスト"文字列')
     assert '""' in result or '"テスト' in result
+
+
+def test_tokenize_text_long_document_with_newlines():
+    """SudachiPyのバイト長制約(約49149バイト)を超える長文でも例外にならないこと。"""
+    from jaqmd.tokenize.morph import _MAX_BYTES
+
+    line = "これはテスト用の文章です。サーバの設定について説明します。\n"
+    # 1行を十分な回数繰り返し、_MAX_BYTES を大きく超える長さにする
+    repeat = (_MAX_BYTES * 3) // len(line.encode("utf-8")) + 10
+    text = line * repeat
+    assert len(text.encode("utf-8")) > _MAX_BYTES
+
+    result = tokenize_text(text)
+    assert isinstance(result, str)
+    assert "サーバー" in result
+
+
+def test_tokenize_text_single_huge_line_without_newline():
+    """改行を含まない巨大な1行でも例外にならないこと（文字単位フォールバック）。"""
+    from jaqmd.tokenize.morph import _MAX_BYTES
+
+    text = "あ" * ((_MAX_BYTES // 3) * 5)  # "あ"は3バイト、上限を大きく超える
+    assert len(text.encode("utf-8")) > _MAX_BYTES
+
+    result = tokenize_text(text)
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+def test_tokenize_text_short_text_unaffected():
+    """短文は分割されても従来と同一の結果になること。"""
+    result = tokenize_text("サーバの設定")
+    assert "サーバー" in result
