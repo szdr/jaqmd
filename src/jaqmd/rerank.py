@@ -36,7 +36,7 @@ _encoders: dict[str, object] = {}
 _load_attempted: set[str] = set()
 
 
-def _get_encoder(model: str = DEFAULT_RERANKER):
+def _get_encoder(model: str = DEFAULT_RERANKER, reporter: Optional[ProgressReporter] = None):
     """TextCrossEncoder をロードして返す。失敗時は None（恒等フォールバック用)。
 
     fastembed 未導入・モデルロード失敗時は例外を投げず None を返す。
@@ -44,6 +44,7 @@ def _get_encoder(model: str = DEFAULT_RERANKER):
     モデルキーごとにエンコーダをキャッシュする（同一プロセス内で複数モデルを併用可能）。
     """
     global _encoders, _load_attempted
+    reporter = reporter or NULL_REPORTER
     if model not in RERANKER_MODELS:
         print(
             f"警告: 未知の reranker モデル指定です（{model}）。'{DEFAULT_RERANKER}' にフォールバックします。",
@@ -70,18 +71,21 @@ def _get_encoder(model: str = DEFAULT_RERANKER):
 
     spec = RERANKER_MODELS[model]
     try:
-        # ruri-v3-reranker-310m の ONNX 版カスタムモデル登録
-        TextCrossEncoder.add_custom_model(
-            model=model,
-            sources=ModelSource(hf=spec["hf"]),
-            model_file=spec["model_file"],
-            additional_files=spec["additional_files"],
-        )
-        cache_dir = Path.home() / ".cache" / "jaqmd" / "models"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        _encoders[model] = TextCrossEncoder(
-            model_name=model, cache_dir=str(cache_dir), threads=os.cpu_count()
-        )
+        with reporter.step(
+            f"Reranker モデル({model})をロード中(初回はダウンロードのため数分かかる場合があります)"
+        ):
+            # ruri-v3-reranker-310m の ONNX 版カスタムモデル登録
+            TextCrossEncoder.add_custom_model(
+                model=model,
+                sources=ModelSource(hf=spec["hf"]),
+                model_file=spec["model_file"],
+                additional_files=spec["additional_files"],
+            )
+            cache_dir = Path.home() / ".cache" / "jaqmd" / "models"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            _encoders[model] = TextCrossEncoder(
+                model_name=model, cache_dir=str(cache_dir), threads=os.cpu_count()
+            )
     except Exception as e:
         print(
             f"警告: reranker モデルのロードに失敗しました（{e}）。無効化して続行します。",
@@ -127,7 +131,7 @@ def rerank(
     if not results or not enabled:
         return results if n is None else results[:n]
 
-    encoder = _get_encoder(model)
+    encoder = _get_encoder(model, reporter)
     if encoder is None:
         return results if n is None else results[:n]
 

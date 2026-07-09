@@ -665,7 +665,7 @@ def embed(
     # fastembed のバッチ処理を活かす。
     COMMIT_INTERVAL = 1000
     texts = [c[4] for c in all_chunks]
-    vectors = embed_documents(texts, batch_size=batch_size)
+    vectors = embed_documents(texts, batch_size=batch_size, reporter=reporter)
 
     with reporter.track("ベクトル化", len(all_chunks)) as advance:
         for n, ((doc_id, docid, chunk_seq, chunk_pos, chunk_text), vec) in enumerate(

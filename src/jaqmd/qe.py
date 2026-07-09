@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 import sys
+import time
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -49,7 +50,7 @@ class ExpansionResult:
     hyde: str
 
 
-def _get_llm():
+def _get_llm(reporter: Optional[ProgressReporter] = None):
     """Query Expansion 用の LLM（llama.cpp）をロードして返す。
 
     fastembed 未導入時（rerank.py の _get_encoder）と同じ「1度だけ試行し
@@ -61,8 +62,10 @@ def _get_llm():
     if _llm_load_attempted:
         return None
     _llm_load_attempted = True
+    reporter = reporter or NULL_REPORTER
 
     try:
+        from huggingface_hub import hf_hub_download
         from llama_cpp import Llama
     except ImportError:
         print(
@@ -75,15 +78,27 @@ def _get_llm():
     try:
         cache_dir = Path.home() / ".cache" / "jaqmd" / "models"
         cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # ダウンロード（未キャッシュ時のみ発生）は huggingface_hub 標準の進捗バーで
+        # 可視化されるよう、ネイティブログの抑制対象からは外す。
+        model_path = hf_hub_download(
+            repo_id=QE_MODEL_REPO,
+            filename=QE_MODEL_FILE,
+            cache_dir=str(cache_dir),
+        )
+
+        # ネイティブ初期化（fd レベルで抑制するため rich のライブ表示は使えない）は
+        # 単発メッセージで前後を知らせる。ローカルにモデルがある場合は通常すぐ終わる。
+        reporter.note("Query Expansion モデルをロード中...")
+        start = time.monotonic()
         with warnings.catch_warnings(), _suppress_native_stderr():
             warnings.simplefilter("ignore")
-            _llm = Llama.from_pretrained(
-                repo_id=QE_MODEL_REPO,
-                filename=QE_MODEL_FILE,
-                cache_dir=str(cache_dir),
+            _llm = Llama(
+                model_path=model_path,
                 n_ctx=2048,
                 verbose=False,
             )
+        reporter.note(f"Query Expansion モデルのロード完了 ({time.monotonic() - start:.1f}s)")
     except Exception as e:
         print(
             f"警告: Query Expansion モデルのロードに失敗しました（{e}）。無効化して続行します。",
@@ -174,7 +189,7 @@ def expand(
             hyde=cached["hyde_text"] or "",
         )
 
-    llm = _get_llm()
+    llm = _get_llm(reporter)
     if llm is None:
         return None
 

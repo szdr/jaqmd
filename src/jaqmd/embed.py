@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
+
+from .progress import NULL_REPORTER, ProgressReporter
 
 EMBED_MODEL = "sirasagi62/ruri-v3-310m-ONNX"
 EMBED_DIM = 768
@@ -10,7 +13,7 @@ QUERY_PREFIX = "検索クエリ: "
 _model = None
 
 
-def _get_model():
+def _get_model(reporter: Optional[ProgressReporter] = None):
     global _model
     if _model is None:
         try:
@@ -22,18 +25,22 @@ def _get_model():
                 "→ pip install 'jaqmd[vector]' を実行してください。"
             ) from e
 
-        # ruri-v3-310m のカスタムモデル登録（ONNX 版）
-        TextEmbedding.add_custom_model(
-            model=EMBED_MODEL,
-            pooling=PoolingType.MEAN,
-            normalization=True,
-            sources=ModelSource(hf="sirasagi62/ruri-v3-310m-ONNX"),
-            dim=EMBED_DIM,
-            model_file="onnx/model.onnx",
-        )
-        cache_dir = Path.home() / ".cache" / "jaqmd" / "models"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        _model = TextEmbedding(model_name=EMBED_MODEL, cache_dir=str(cache_dir))
+        reporter = reporter or NULL_REPORTER
+        with reporter.step(
+            "Embedding モデルをロード中（初回はダウンロードのため数分かかる場合があります）"
+        ):
+            # ruri-v3-310m のカスタムモデル登録（ONNX 版）
+            TextEmbedding.add_custom_model(
+                model=EMBED_MODEL,
+                pooling=PoolingType.MEAN,
+                normalization=True,
+                sources=ModelSource(hf="sirasagi62/ruri-v3-310m-ONNX"),
+                dim=EMBED_DIM,
+                model_file="onnx/model.onnx",
+            )
+            cache_dir = Path.home() / ".cache" / "jaqmd" / "models"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            _model = TextEmbedding(model_name=EMBED_MODEL, cache_dir=str(cache_dir))
     return _model
 
 
@@ -41,25 +48,29 @@ def embed_documents(
     texts: list[str],
     *,
     batch_size: int = 1,
+    reporter: Optional[ProgressReporter] = None,
 ):
     """文書テキストのリストを embedding する（DOC_PREFIX を自前付与）。
 
     Args:
         texts: 文書テキストのリスト。
         batch_size: fastembed に渡すバッチサイズ。大きいほど高速だがメモリを使う。
+        reporter: 進捗表示用の ProgressReporter（None なら無効）。
     """
     if not texts:
         return []
-    model = _get_model()
+    model = _get_model(reporter)
     prefixed = [DOC_PREFIX + t for t in texts]
     return model.embed(prefixed, batch_size=batch_size)
 
 
-def embed_query(text: str) -> list[float]:
+def embed_query(text: str, *, reporter: Optional[ProgressReporter] = None) -> list[float]:
     """クエリテキストを embedding する（QUERY_PREFIX を自前付与）。"""
-    model = _get_model()
-    prefixed = QUERY_PREFIX + text
-    return list(next(model.embed([prefixed])))
+    reporter = reporter or NULL_REPORTER
+    model = _get_model(reporter)
+    with reporter.step("クエリをベクトル化"):
+        prefixed = QUERY_PREFIX + text
+        return list(next(model.embed([prefixed])))
 
 
 def count_tokens(text: str) -> int:

@@ -44,8 +44,7 @@ def vsearch(
             "sqlite-vec 拡張のロードに失敗している可能性があります。"
         ) from e
 
-    with reporter.step("クエリをベクトル化"):
-        vec = embed_query(query)
+    vec = embed_query(query, reporter=reporter)
     vec_bytes = sqlite_vec.serialize_float32(vec)
 
     # 集約前に多めに取得（collection フィルタ後に n 件確保するため）
