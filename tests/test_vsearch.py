@@ -63,7 +63,9 @@ def _mock_embed_query(monkeypatch, vector):
     """vsearch 内の embed_query をモックに差し替える。"""
     import jaqmd.search.vsearch as vsearch_mod
 
-    monkeypatch.setattr(vsearch_mod, "embed_query", lambda q: vector, raising=False)
+    monkeypatch.setattr(
+        vsearch_mod, "embed_query", lambda q, **kwargs: vector, raising=False
+    )
 
     # vsearch モジュール内で from ..embed import embed_query しているので直接パッチ
     import importlib
@@ -79,7 +81,7 @@ def _mock_embed_query(monkeypatch, vector):
         import jaqmd.embed as embed_mod
 
         orig = getattr(embed_mod, "embed_query", None)
-        embed_mod.embed_query = lambda q: vector
+        embed_mod.embed_query = lambda q, **kwargs: vector
         try:
             return original_vsearch(conn, query, **kwargs)
         finally:
@@ -97,7 +99,7 @@ def test_basic_vsearch(vec_conn, monkeypatch):
 
     import jaqmd.embed as embed_mod
 
-    monkeypatch.setattr(embed_mod, "embed_query", lambda q: query_vec)
+    monkeypatch.setattr(embed_mod, "embed_query", lambda q, **kwargs: query_vec)
 
     results = vsearch(vec_conn, "テストクエリ", n=3)
     assert len(results) >= 1
@@ -130,7 +132,7 @@ def test_doc_unit_aggregation(vec_conn, monkeypatch):
 
     import jaqmd.embed as embed_mod
 
-    monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 1))
+    monkeypatch.setattr(embed_mod, "embed_query", lambda q, **kwargs: _unit_vec(DIM, 1))
 
     results = vsearch(vec_conn, "テストクエリ", n=5)
     docids = [r.docid for r in results]
@@ -142,7 +144,7 @@ def test_score_range(vec_conn, monkeypatch):
     DIM = 768
     import jaqmd.embed as embed_mod
 
-    monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 0))
+    monkeypatch.setattr(embed_mod, "embed_query", lambda q, **kwargs: _unit_vec(DIM, 0))
 
     results = vsearch(vec_conn, "テスト", n=3)
     for r in results:
@@ -154,7 +156,7 @@ def test_n_limit(vec_conn, monkeypatch):
     DIM = 768
     import jaqmd.embed as embed_mod
 
-    monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 0))
+    monkeypatch.setattr(embed_mod, "embed_query", lambda q, **kwargs: _unit_vec(DIM, 0))
 
     results = vsearch(vec_conn, "テスト", n=2)
     assert len(results) <= 2
@@ -165,7 +167,7 @@ def test_all_results(vec_conn, monkeypatch):
     DIM = 768
     import jaqmd.embed as embed_mod
 
-    monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 0))
+    monkeypatch.setattr(embed_mod, "embed_query", lambda q, **kwargs: _unit_vec(DIM, 0))
 
     results = vsearch(vec_conn, "テスト", n=1, all_results=True)
     assert len(results) > 1
@@ -190,7 +192,7 @@ def test_soft_deleted_excluded(vec_conn, monkeypatch):
 
     import jaqmd.embed as embed_mod
 
-    monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 0))
+    monkeypatch.setattr(embed_mod, "embed_query", lambda q, **kwargs: _unit_vec(DIM, 0))
 
     results = vsearch(vec_conn, "テスト", n=5)
     filepaths = [r.filepath for r in results]
@@ -231,7 +233,7 @@ def test_collection_filter(vec_conn, monkeypatch, doc_dir):
 
     import jaqmd.embed as embed_mod
 
-    monkeypatch.setattr(embed_mod, "embed_query", lambda q: _unit_vec(DIM, 0))
+    monkeypatch.setattr(embed_mod, "embed_query", lambda q, **kwargs: _unit_vec(DIM, 0))
 
     results = vsearch(vec_conn, "テスト", n=5, collection="test")
     collections = {r.filepath.split("/")[0] for r in results}

@@ -9,7 +9,9 @@ def _no_real_rerank(request, monkeypatch):
     """
     if request.node.get_closest_marker("integration"):
         return
-    monkeypatch.setattr("jaqmd.rerank._get_encoder", lambda model=None: None)
+    monkeypatch.setattr(
+        "jaqmd.rerank._get_encoder", lambda model=None, reporter=None: None
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -20,7 +22,7 @@ def _no_real_qe(request, monkeypatch):
     """
     if request.node.get_closest_marker("integration"):
         return
-    monkeypatch.setattr("jaqmd.qe._get_llm", lambda: None)
+    monkeypatch.setattr("jaqmd.qe._get_llm", lambda reporter=None: None)
 
 
 @pytest.fixture

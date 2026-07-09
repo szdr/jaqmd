@@ -75,6 +75,16 @@ class ProgressReporter:
             progress.add_task(label)
             yield
 
+    def note(self, message: str) -> None:
+        """ライブ表示を使わず単発でメッセージを stderr に出す。
+
+        fd レベルで stderr を一時的に付け替える処理（ネイティブログの抑制等）と
+        同時には走らせられない `step`/`track` の代わりに使う。
+        """
+        if not self.enabled:
+            return
+        Console(file=sys.stderr).print(message)
+
     @contextmanager
     def track(
         self, label: str, total: Optional[int] = None
