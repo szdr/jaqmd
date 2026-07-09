@@ -6,7 +6,7 @@ from typing import Callable, Optional
 
 from .trisearch import SearchResult, trisearch
 from ..store import get_meta
-from ..rerank import rerank, RERANK_TOP_K
+from ..rerank import rerank, RERANK_TOP_K, DEFAULT_RERANKER
 from ..qe import expand as qe_expand, ExpansionResult
 from ..progress import NULL_REPORTER, ProgressReporter
 
@@ -80,6 +80,7 @@ def query(
     min_score: Optional[float] = None,
     all_results: bool = False,
     rerank_enabled: bool = True,
+    rerank_model: str = DEFAULT_RERANKER,
     qe_enabled: bool = True,
     reporter: Optional[ProgressReporter] = None,
     on_expansion: Optional[Callable[[Optional[ExpansionResult]], None]] = None,
@@ -97,6 +98,7 @@ def query(
         min_score: RRF スコアの最小閾値（None で足切りなし）。
         all_results: True なら全件返却（n・min_score は適用しない）。
         rerank_enabled: False なら reranker を無効化（RRF 順のまま）。
+        rerank_model: 使用する reranker モデルキー（既定 "default"）。
         qe_enabled: False なら Query Expansion を無効化（raw クエリのみ使用）。
         reporter: 進捗表示用の ProgressReporter（None なら無効）。
         on_expansion: 指定すると Query Expansion 完了直後（trigram/morph/vector
@@ -175,7 +177,12 @@ def query(
     # reranker（融合プール全体に適用してから n 制限する。--all 時は全件を再スコア）
     top_k = None if all_results else RERANK_TOP_K
     fused = rerank(
-        query_text, fused, enabled=rerank_enabled, top_k=top_k, reporter=reporter
+        query_text,
+        fused,
+        enabled=rerank_enabled,
+        model=rerank_model,
+        top_k=top_k,
+        reporter=reporter,
     )
 
     fused = _minmax_scale(fused)

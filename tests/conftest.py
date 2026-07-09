@@ -9,7 +9,7 @@ def _no_real_rerank(request, monkeypatch):
     """
     if request.node.get_closest_marker("integration"):
         return
-    monkeypatch.setattr("jaqmd.rerank._get_encoder", lambda: None)
+    monkeypatch.setattr("jaqmd.rerank._get_encoder", lambda model=None: None)
 
 
 @pytest.fixture(autouse=True)

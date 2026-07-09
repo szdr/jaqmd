@@ -12,25 +12,50 @@ from .progress import NULL_REPORTER, ProgressReporter
 if TYPE_CHECKING:
     from .search.trisearch import SearchResult
 
-RERANK_MODEL = "szdr/ruri-v3-reranker-310m-onnx"
 RERANK_TOP_K = 50
 
-_encoder = None
-_encoder_load_attempted = False
+DEFAULT_RERANKER = "default"
+
+# reranker モデルレジストリ。fastembed の add_custom_model 登録に必要な情報を保持する。
+# int8 版は model.onnx 単体（additional_files 無し）でフル版とファイル構成が異なるため、
+# モデルごとに登録メタ情報を分けて持つ。
+RERANKER_MODELS: dict[str, dict] = {
+    "default": {
+        "hf": "szdr/ruri-v3-reranker-310m-onnx",
+        "model_file": "model.onnx",
+        "additional_files": ["model.onnx.data"],
+    },
+    "int8": {
+        "hf": "szdr/ruri-v3-reranker-310m-onnx_int8_arm64",
+        "model_file": "model.onnx",
+        "additional_files": None,
+    },
+}
+
+_encoders: dict[str, object] = {}
+_load_attempted: set[str] = set()
 
 
-def _get_encoder():
-    """TextCrossEncoder をロードして返す。失敗時は None（恒等フォールバック用）。
+def _get_encoder(model: str = DEFAULT_RERANKER):
+    """TextCrossEncoder をロードして返す。失敗時は None（恒等フォールバック用)。
 
     fastembed 未導入・モデルロード失敗時は例外を投げず None を返す。
     embed.py の _get_model() と同じカスタムモデル登録パターンを使う。
+    モデルキーごとにエンコーダをキャッシュする（同一プロセス内で複数モデルを併用可能）。
     """
-    global _encoder, _encoder_load_attempted
-    if _encoder is not None:
-        return _encoder
-    if _encoder_load_attempted:
+    global _encoders, _load_attempted
+    if model not in RERANKER_MODELS:
+        print(
+            f"警告: 未知の reranker モデル指定です（{model}）。'{DEFAULT_RERANKER}' にフォールバックします。",
+            file=sys.stderr,
+        )
+        model = DEFAULT_RERANKER
+
+    if model in _encoders:
+        return _encoders[model]
+    if model in _load_attempted:
         return None
-    _encoder_load_attempted = True
+    _load_attempted.add(model)
 
     try:
         from fastembed.rerank.cross_encoder import TextCrossEncoder
@@ -43,18 +68,19 @@ def _get_encoder():
         )
         return None
 
+    spec = RERANKER_MODELS[model]
     try:
         # ruri-v3-reranker-310m の ONNX 版カスタムモデル登録
         TextCrossEncoder.add_custom_model(
-            model=RERANK_MODEL,
-            sources=ModelSource(hf="szdr/ruri-v3-reranker-310m-onnx"),
-            model_file="model.onnx",
-            additional_files=["model.onnx.data"],
+            model=model,
+            sources=ModelSource(hf=spec["hf"]),
+            model_file=spec["model_file"],
+            additional_files=spec["additional_files"],
         )
         cache_dir = Path.home() / ".cache" / "jaqmd" / "models"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        _encoder = TextCrossEncoder(
-            model_name=RERANK_MODEL, cache_dir=str(cache_dir), threads=os.cpu_count()
+        _encoders[model] = TextCrossEncoder(
+            model_name=model, cache_dir=str(cache_dir), threads=os.cpu_count()
         )
     except Exception as e:
         print(
@@ -62,7 +88,7 @@ def _get_encoder():
             file=sys.stderr,
         )
         return None
-    return _encoder
+    return _encoders[model]
 
 
 def _doc_text(r: "SearchResult") -> str:
@@ -75,6 +101,7 @@ def rerank(
     results: list["SearchResult"],
     *,
     enabled: bool = True,
+    model: str = DEFAULT_RERANKER,
     top_k: Optional[int] = RERANK_TOP_K,
     n: Optional[int] = None,
     reporter: Optional[ProgressReporter] = None,
@@ -88,6 +115,7 @@ def rerank(
         query: 検索クエリ。
         results: RRF 融合済みの SearchResult リスト（スコア降順）。
         enabled: False なら reranker を使わず恒等フォールバック。
+        model: 使用する reranker モデルキー（RERANKER_MODELS 参照。既定 "default"）。
         top_k: 再スコア対象を先頭 top_k 件に限定する。None なら全件。
         n: 上位 n 件に絞る場合は指定する。None なら全件返却。
         reporter: 進捗表示用の ProgressReporter（None なら無効）。
@@ -99,7 +127,7 @@ def rerank(
     if not results or not enabled:
         return results if n is None else results[:n]
 
-    encoder = _get_encoder()
+    encoder = _get_encoder(model)
     if encoder is None:
         return results if n is None else results[:n]
 

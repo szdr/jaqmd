@@ -784,6 +784,9 @@ def query(
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
     no_rerank: bool = typer.Option(False, "--no-rerank", help="reranker を無効化"),
+    reranker: str = typer.Option(
+        "default", "--reranker", help="reranker モデル (default|int8)"
+    ),
     no_qe: bool = typer.Option(False, "--no-qe", help="Query Expansion を無効化"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
 ) -> None:
@@ -806,7 +809,11 @@ def query(
             "エラー: trigram インデックスが構築されていません。\n"
             "→ `jaqmd update` を実行してください。"
         ),
-        search_kwargs={"rerank_enabled": not no_rerank, "qe_enabled": not no_qe},
+        search_kwargs={
+            "rerank_enabled": not no_rerank,
+            "rerank_model": reranker,
+            "qe_enabled": not no_qe,
+        },
         collect_qe=True,
     )
 
