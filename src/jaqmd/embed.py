@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
+from .modelcache import MODEL_CACHE_DIR, is_model_cached
 from .progress import NULL_REPORTER, ProgressReporter
 
 EMBED_MODEL = "sirasagi62/ruri-v3-310m-ONNX"
@@ -26,9 +26,12 @@ def _get_model(reporter: Optional[ProgressReporter] = None):
             ) from e
 
         reporter = reporter or NULL_REPORTER
-        with reporter.step(
-            "Embedding モデルをロード中（初回はダウンロードのため数分かかる場合があります）"
-        ):
+        cache_dir = MODEL_CACHE_DIR
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        label = "Embedding モデルをロード中"
+        if not is_model_cached("sirasagi62/ruri-v3-310m-ONNX", "onnx/model.onnx", str(cache_dir)):
+            label += "（初回はダウンロードのため数分かかる場合があります）"
+        with reporter.step(label):
             # ruri-v3-310m のカスタムモデル登録（ONNX 版）
             TextEmbedding.add_custom_model(
                 model=EMBED_MODEL,
@@ -38,8 +41,6 @@ def _get_model(reporter: Optional[ProgressReporter] = None):
                 dim=EMBED_DIM,
                 model_file="onnx/model.onnx",
             )
-            cache_dir = Path.home() / ".cache" / "jaqmd" / "models"
-            cache_dir.mkdir(parents=True, exist_ok=True)
             _model = TextEmbedding(model_name=EMBED_MODEL, cache_dir=str(cache_dir))
     return _model
 

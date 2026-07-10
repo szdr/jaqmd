@@ -4,9 +4,9 @@ import os
 
 import dataclasses
 import sys
-from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
+from .modelcache import MODEL_CACHE_DIR, is_model_cached
 from .progress import NULL_REPORTER, ProgressReporter
 
 if TYPE_CHECKING:
@@ -70,10 +70,13 @@ def _get_encoder(model: str = DEFAULT_RERANKER, reporter: Optional[ProgressRepor
         return None
 
     spec = RERANKER_MODELS[model]
+    cache_dir = MODEL_CACHE_DIR
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    label = f"Reranker モデル({model})をロード中"
+    if not is_model_cached(spec["hf"], spec["model_file"], str(cache_dir)):
+        label += "(初回はダウンロードのため数分かかる場合があります)"
     try:
-        with reporter.step(
-            f"Reranker モデル({model})をロード中(初回はダウンロードのため数分かかる場合があります)"
-        ):
+        with reporter.step(label):
             # ruri-v3-reranker-310m の ONNX 版カスタムモデル登録
             TextCrossEncoder.add_custom_model(
                 model=model,
@@ -81,8 +84,6 @@ def _get_encoder(model: str = DEFAULT_RERANKER, reporter: Optional[ProgressRepor
                 model_file=spec["model_file"],
                 additional_files=spec["additional_files"],
             )
-            cache_dir = Path.home() / ".cache" / "jaqmd" / "models"
-            cache_dir.mkdir(parents=True, exist_ok=True)
             _encoders[model] = TextCrossEncoder(
                 model_name=model, cache_dir=str(cache_dir), threads=os.cpu_count()
             )
