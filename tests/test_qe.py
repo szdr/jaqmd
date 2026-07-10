@@ -47,7 +47,7 @@ def test_extract_json_unclosed_returns_none():
 
 
 def test_expand_returns_none_when_llm_unavailable(conn, monkeypatch):
-    monkeypatch.setattr("jaqmd.qe._get_llm", lambda: None)
+    monkeypatch.setattr("jaqmd.qe._get_llm", lambda reporter=None: None)
     assert expand(conn, "木魚") is None
 
 
@@ -74,7 +74,7 @@ def test_expand_cache_miss_then_hit(conn, monkeypatch):
         ensure_ascii=False,
     )
     llm = _DummyLlm(canned)
-    monkeypatch.setattr("jaqmd.qe._get_llm", lambda: llm)
+    monkeypatch.setattr("jaqmd.qe._get_llm", lambda reporter=None: llm)
 
     result = expand(conn, "木魚")
     assert result == ExpansionResult(
@@ -98,13 +98,13 @@ def test_expand_cache_miss_then_hit(conn, monkeypatch):
 
 def test_expand_returns_none_on_malformed_response(conn, monkeypatch):
     llm = _DummyLlm("not json at all")
-    monkeypatch.setattr("jaqmd.qe._get_llm", lambda: llm)
+    monkeypatch.setattr("jaqmd.qe._get_llm", lambda reporter=None: llm)
     assert expand(conn, "テストクエリ") is None
 
 
 def test_expand_returns_none_on_missing_keys(conn, monkeypatch):
     llm = _DummyLlm(json.dumps({"lex": ["a"]}))
-    monkeypatch.setattr("jaqmd.qe._get_llm", lambda: llm)
+    monkeypatch.setattr("jaqmd.qe._get_llm", lambda reporter=None: llm)
     assert expand(conn, "テストクエリ2") is None
 
 
@@ -113,7 +113,7 @@ def test_expand_returns_none_when_inference_raises(conn, monkeypatch):
         def create_chat_completion(self, *a, **kw):
             raise RuntimeError("boom")
 
-    monkeypatch.setattr("jaqmd.qe._get_llm", lambda: _RaisingLlm())
+    monkeypatch.setattr("jaqmd.qe._get_llm", lambda reporter=None: _RaisingLlm())
     assert expand(conn, "テストクエリ3") is None
 
 
