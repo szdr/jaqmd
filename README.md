@@ -50,6 +50,9 @@ uv tool install "jaqmd[vector]"
 # Query Expansion を使う場合
 uv tool install "jaqmd[qe]"
 
+# MCP サーバーを使う場合
+uv tool install "jaqmd[mcp]"
+
 # すべての機能
 uv tool install "jaqmd[all]"
 ```
@@ -111,7 +114,7 @@ jaqmd query "日本語の検索エンジンを作りたい"
 | `jaqmd ls [collection]` | コレクション内のファイル一覧 |
 | `jaqmd status` | インデックスの構築状態を表示 |
 | `jaqmd cleanup` | キャッシュ削除・DB最適化 |
-| `jaqmd mcp [--http]` | MCP サーバーを起動 |
+| `jaqmd mcp` | MCP サーバーを stdio で起動（`--http` は未対応） |
 
 ### 検索オプション
 
@@ -167,6 +170,44 @@ vectors     : ✗ not indexed   → run: jaqmd embed
 Available   : search, mosearch
 Unavailable : vsearch, query(full)
 ```
+
+## MCP サーバー
+
+[tobi/qmd](https://github.com/tobi/qmd) の MCP サーバーに準拠したツールセットを stdio トランスポートで公開します（`jaqmd[mcp]` が必要）。
+
+| ツール | 内容 |
+|--------|------|
+| `query` | typed searches（`{type: lex\|vec\|hyde, text}` の配列、1〜10件）による RRF 融合 + リランク検索。先頭の search は融合時に2倍の重みを持つ |
+| `get` | パスまたは docid（`#abc123`）でドキュメントを1件取得 |
+| `multi_get` | glob パターンまたはカンマ区切りで複数ドキュメントを取得 |
+| `status` | インデックスの構築状態・コレクション一覧を取得 |
+
+`query` は `jaqmd query` の単一クエリ文字列＋自動 Query Expansion とは異なり、MCP クライアント側が
+lex/vec/hyde のサブクエリを明示的に組み立てて渡す設計です（tobi/qmd 準拠）。`vec`/`hyde` はベクトルインデックス
+未構築の場合、その search のみ無視して degrade します。
+
+起動:
+
+```bash
+jaqmd mcp
+```
+
+Claude Desktop（`~/Library/Application Support/Claude/claude_desktop_config.json`）:
+
+```json
+{
+  "mcpServers": {
+    "jaqmd": {
+      "command": "jaqmd",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Claude Code（`.mcp.json` または `claude mcp add`）も同様に `command: jaqmd`, `args: ["mcp"]` で設定します。
+
+> `--http` トランスポートは現時点で未対応です（`jaqmd mcp --http` はエラーで終了します）。
 
 ## トラブルシューティング
 

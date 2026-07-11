@@ -128,13 +128,28 @@ ONNX 不要・追加依存は `sudachipy` + `sudachidict-core`（`pyproject.toml
 
 ---
 
-## Phase D: MCP サーバー（mcp）
+## Phase D: MCP サーバー（mcp）✅ 完了
 
-### 作業単位 D-1: MCP サーバー実装 + CLI
-- `src/jaqmd/mcp/server.py` を新設。Python MCP SDK で `search` / `mosearch` / `vsearch` / `query` / `get` を MCP ツールとして公開（既存の検索・取得関数を薄くラップ）。
-- `pyproject.toml` に MCP SDK 依存を追加（optional extras 推奨）。
-- `cli.py:421-430` の `mcp` スタブを置換（`--http` モード対応）。
-- テスト: ツール登録とハンドラの単体テスト。
+仕様は tobi/qmd の MCP サーバーに準拠（PLANS.md 初版の `search`/`mosearch`/`vsearch` 個別公開案から変更）。
+
+### 作業単位 D-1: MCP サーバー実装 + CLI ✅
+- `src/jaqmd/mcp/server.py` を新設。Python MCP SDK（`mcp` パッケージ、FastMCP）で
+  tobi/qmd 準拠の **`query` / `get` / `multi_get` / `status`** の4ツールを公開。
+  「純粋ロジック関数（`run_query`/`run_get`/`run_multi_get`/`run_status`）＋ FastMCP 登録の薄いラッパー」
+  構成にし、サーバーを起動せず単体テスト可能にした。
+- `query` ツールは tobi 風の typed `searches` 配列（`{type: lex|vec|hyde, text}`、1〜10件、先頭2x重み）
+  を入力に取る。`src/jaqmd/search/query.py` に新設した `query_searches()` が
+  lex → trigram/mosearch、vec/hyde → vsearch（vec_indexed 時のみ）に写像し、
+  既存の `_rrf_fuse`（weights 引数を追加）・`rerank`・`_minmax_scale` を再利用して融合する。
+  既存の `query()`（単一クエリ文字列＋内部QE）とは共通の後処理（rerank→正規化→足切り→件数制限）を
+  `_finalize()` として切り出して共有し、`query()` の挙動は変更していない。
+- `get`/`multi_get`/`status` は既存の `store.get_document`/`store.get_stats` 等を再利用。
+- `pyproject.toml` に `[mcp]` extra（`mcp>=1.2`）を追加、`all` にも追記。
+- トランスポートは **stdio のみ**。`cli.py` の `mcp` コマンドは `--http` 指定時は「未対応」で exit 1 を返す
+  （`--http` の本実装・daemon 化は対象外）。
+- テスト: `tests/test_mcp.py`（純粋関数16件 + FastMCP登録健全性）、`tests/test_query.py`
+  （`query_searches`/weighted `_rrf_fuse` 追加分12件）、`tests/test_cli.py`
+  （`mcp --http` 未対応の確認）。全202テスト緑。
 
 ---
 

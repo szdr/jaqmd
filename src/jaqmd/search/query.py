@@ -38,28 +38,35 @@ def _minmax_scale(results: list[SearchResult]) -> list[SearchResult]:
 
 
 def _rrf_fuse(
-    result_lists: list[list[SearchResult]], k: int = RRF_K
+    result_lists: list[list[SearchResult]],
+    k: int = RRF_K,
+    weights: Optional[list[float]] = None,
 ) -> list[SearchResult]:
     """Reciprocal Rank Fusion で複数の検索結果リストを融合する。
 
-    各リストの rank（0始まり）位置の結果に 1/(k + rank + 1) を加算する。
+    各リストの rank（0始まり）位置の結果に weight / (k + rank + 1) を加算する。
     代表 SearchResult は docid 初出時のもの（リスト順）を保持し、
     RRF スコアを score フィールドに差し替えて返す。
 
     Args:
         result_lists: 融合する SearchResult リストのリスト（trigram→morph→vec の順を推奨）。
         k: RRF パラメータ（デフォルト 60）。
+        weights: result_lists と同じ長さの重みリスト。None なら全リスト重み 1.0
+            （tobi/qmd 風の「先頭 search を 2x 優遇」等の実装に利用する）。
 
     Returns:
         RRF スコア降順の SearchResult リスト。
     """
+    if weights is None:
+        weights = [1.0] * len(result_lists)
+
     scores: dict[str, float] = {}
     representatives: dict[str, SearchResult] = {}
 
-    for result_list in result_lists:
+    for weight, result_list in zip(weights, result_lists):
         for rank, result in enumerate(result_list):
             docid = result.docid
-            scores[docid] = scores.get(docid, 0.0) + 1.0 / (k + rank + 1)
+            scores[docid] = scores.get(docid, 0.0) + weight / (k + rank + 1)
             if docid not in representatives:
                 representatives[docid] = result
 
@@ -68,6 +75,43 @@ def _rrf_fuse(
         for docid, score in scores.items()
     ]
     fused.sort(key=lambda r: r.score, reverse=True)
+    return fused
+
+
+def _finalize(
+    fused: list[SearchResult],
+    *,
+    query_for_rerank: str,
+    rerank_enabled: bool,
+    rerank_model: str,
+    all_results: bool,
+    n: int,
+    min_score: Optional[float],
+    candidate_top_k: Optional[int],
+    reporter: Optional[ProgressReporter] = None,
+) -> list[SearchResult]:
+    """RRF 融合後の共通後処理: rerank → min-max 正規化 → 足切り → n 制限。
+
+    `query()` と `query_searches()` で共有する（重複回避）。
+    """
+    top_k = None if all_results else candidate_top_k
+    fused = rerank(
+        query_for_rerank,
+        fused,
+        enabled=rerank_enabled,
+        model=rerank_model,
+        top_k=top_k,
+        reporter=reporter,
+    )
+
+    fused = _minmax_scale(fused)
+
+    if min_score is not None:
+        fused = [r for r in fused if r.score >= min_score]
+
+    if not all_results:
+        fused = fused[:n]
+
     return fused
 
 
@@ -175,24 +219,113 @@ def query(
     fused = _rrf_fuse(result_lists, k=RRF_K)
 
     # reranker（融合プール全体に適用してから n 制限する。--all 時は全件を再スコア）
-    top_k = None if all_results else RERANK_TOP_K
-    fused = rerank(
-        query_text,
+    return _finalize(
         fused,
-        enabled=rerank_enabled,
-        model=rerank_model,
-        top_k=top_k,
+        query_for_rerank=query_text,
+        rerank_enabled=rerank_enabled,
+        rerank_model=rerank_model,
+        all_results=all_results,
+        n=n,
+        min_score=min_score,
+        candidate_top_k=RERANK_TOP_K,
         reporter=reporter,
     )
 
-    fused = _minmax_scale(fused)
 
-    # min_score 足切り（0-1 正規化後のスコアと比較、all_results の有無に関わらず適用）
-    if min_score is not None:
-        fused = [r for r in fused if r.score >= min_score]
+# tobi/qmd 風の typed search 種別
+SearchType = str  # "lex" | "vec" | "hyde"
 
-    # n 制限（all_results=True なら適用しない）
-    if not all_results:
-        fused = fused[:n]
 
-    return fused
+def query_searches(
+    conn: sqlite3.Connection,
+    searches: list[tuple[str, str]],
+    *,
+    collections: Optional[list[str]] = None,
+    limit: int = 10,
+    min_score: float = 0.0,
+    candidate_limit: int = 40,
+    rerank_enabled: bool = True,
+    rerank_model: str = DEFAULT_RERANKER,
+    reporter: Optional[ProgressReporter] = None,
+) -> list[SearchResult]:
+    """tobi/qmd 風の typed searches 配列によるハイブリッド検索（MCP query ツール用）。
+
+    `query()` が単一クエリ文字列＋内部 Query Expansion で lex/vec/hyde を自動生成するのに対し、
+    こちらは呼び出し側（MCP クライアント）が明示的に型付きサブクエリを渡す。
+
+    Args:
+        conn: sqlite3 接続。
+        searches: `(type, text)` のリスト（type は "lex" / "vec" / "hyde"）。1〜10 件を想定。
+            先頭の search は RRF 融合時に weight=2.0 で優遇される（tobi/qmd 仕様）。
+            "lex" は trigram（常時）＋ morph（morph_indexed なら）の両方で検索する。
+            "vec" / "hyde" は vec_indexed のときのみ vsearch で検索する（未構築時は無視して degrade）。
+        collections: 絞り込むコレクション名のリスト（OR）。None で全コレクション。
+        limit: 返却件数。
+        min_score: 0-1 正規化後のスコア閾値。
+        candidate_limit: reranker に渡す融合プールの上位候補数。
+        rerank_enabled: False なら reranker を無効化（RRF 順のまま）。
+        rerank_model: 使用する reranker モデルキー。
+        reporter: 進捗表示用の ProgressReporter。
+
+    Returns:
+        RRF 融合 + rerank 後の SearchResult リスト（スコア降順、最大 limit 件）。
+    """
+    reporter = reporter or NULL_REPORTER
+    if not searches:
+        return []
+
+    morph_available = get_meta(conn, "morph_indexed") == "1"
+    vec_indexed = get_meta(conn, "vec_indexed") == "1"
+
+    result_lists: list[list[SearchResult]] = []
+    weights: list[float] = []
+
+    for i, (stype, text) in enumerate(searches):
+        weight = 2.0 if i == 0 else 1.0
+
+        if stype == "lex":
+            tri_results = trisearch(conn, text, all_results=True, reporter=reporter)
+            result_lists.append(tri_results)
+            weights.append(weight)
+
+            if morph_available:
+                from .mosearch import mosearch
+
+                mo_results = mosearch(conn, text, all_results=True, reporter=reporter)
+                result_lists.append(mo_results)
+                weights.append(weight)
+
+        elif stype in ("vec", "hyde"):
+            if vec_indexed:
+                from .vsearch import vsearch
+
+                vs_results = vsearch(conn, text, all_results=True, reporter=reporter)
+                result_lists.append(vs_results)
+                weights.append(weight)
+
+        else:
+            raise ValueError(f"未知の search type です: {stype!r}（lex/vec/hyde のいずれか）")
+
+    if not result_lists:
+        return []
+
+    fused = _rrf_fuse(result_lists, k=RRF_K, weights=weights)
+
+    # collections フィルタ（OR）。filepath は "collection/path" 構成のため先頭セグメントで判定する。
+    if collections:
+        collection_set = set(collections)
+        fused = [
+            r for r in fused if r.filepath.split("/", 1)[0] in collection_set
+        ]
+
+    return _finalize(
+        fused,
+        query_for_rerank=searches[0][1],
+        rerank_enabled=rerank_enabled,
+        rerank_model=rerank_model,
+        all_results=False,
+        n=limit,
+        min_score=min_score,
+        candidate_top_k=candidate_limit,
+        reporter=reporter,
+    )

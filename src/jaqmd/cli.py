@@ -820,11 +820,22 @@ def query(
 
 @app.command()
 def mcp(
-    http: bool = typer.Option(False, "--http", help="HTTP モード"),
+    http: bool = typer.Option(False, "--http", help="HTTP モード（未対応）"),
 ) -> None:
-    """MCP サーバーを起動します（次イテレーション対応予定）。"""
-    typer.echo(
-        "エラー: MCP サーバー機能は次イテレーション対応予定です。",
-        err=True,
-    )
-    raise typer.Exit(1)
+    """MCP サーバーを起動します（stdio）。"""
+    if http:
+        typer.echo(
+            "エラー: HTTP モードは未対応です（stdio のみ対応）。",
+            err=True,
+        )
+        raise typer.Exit(1)
+    try:
+        from .mcp.server import serve_stdio
+    except ImportError:
+        typer.echo(
+            "エラー: MCP SDK が見つかりません。\n"
+            "→ pip install 'jaqmd[mcp]' を実行してください。",
+            err=True,
+        )
+        raise typer.Exit(1)
+    serve_stdio()

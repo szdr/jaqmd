@@ -353,6 +353,8 @@ def test_vsearch_unimplemented(tmp_cache):
     assert "embed" in result.output
 
 
-def test_mcp_unimplemented(tmp_cache):
-    result = runner.invoke(app, ["mcp"])
+def test_mcp_http_unsupported(tmp_cache):
+    """--http は未対応で exit 1（stdio のみ対応）。stdio 起動はブロッキングのためテストしない。"""
+    result = runner.invoke(app, ["mcp", "--http"])
     assert result.exit_code != 0
+    assert "stdio" in result.output

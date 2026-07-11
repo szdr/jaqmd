@@ -6,7 +6,7 @@ import pytest
 
 from jaqmd.store import add_collection, set_meta, upsert_document
 from jaqmd.search.trisearch import SearchResult
-from jaqmd.search.query import _rrf_fuse, RRF_K, query
+from jaqmd.search.query import _rrf_fuse, RRF_K, query, query_searches
 
 
 # ---------------------------------------------------------------------------
@@ -79,6 +79,28 @@ def test_rrf_fuse_empty_lists():
     assert _rrf_fuse([]) == []
     assert _rrf_fuse([[]]) == []
     assert _rrf_fuse([[], []]) == []
+
+
+def test_rrf_fuse_weights_default_matches_unweighted():
+    """weights 未指定時は全リスト重み1.0（従来どおりの挙動）と一致する。"""
+    list_a = [_make_result("a"), _make_result("b")]
+    list_b = [_make_result("a"), _make_result("c")]
+    fused_default = _rrf_fuse([list_a, list_b])
+    fused_explicit = _rrf_fuse([list_a, list_b], weights=[1.0, 1.0])
+    assert [(r.docid, r.score) for r in fused_default] == [
+        (r.docid, r.score) for r in fused_explicit
+    ]
+
+
+def test_rrf_fuse_weights_boost_first_list():
+    """先頭リストに weight=2.0 を与えると、そのリスト由来のスコア寄与が2倍になる。"""
+    list_a = [_make_result("a")]  # weight 2.0
+    list_b = [_make_result("b")]  # weight 1.0
+    fused = _rrf_fuse([list_a, list_b], weights=[2.0, 1.0])
+    scores = {r.docid: r.score for r in fused}
+    assert scores["a"] == pytest.approx(2.0 / (RRF_K + 1))
+    assert scores["b"] == pytest.approx(1.0 / (RRF_K + 1))
+    assert scores["a"] > scores["b"]
 
 
 def test_rrf_fuse_score_ordering():
@@ -384,3 +406,96 @@ def test_query_qe_vec_expansion_used_for_vsearch(hybrid_conn, monkeypatch):
     query(hybrid_conn, "元のクエリ")
     assert "展開されたベクトルクエリ" in captured_queries
     assert "仮想文書テキスト" in captured_queries
+
+
+# ---------------------------------------------------------------------------
+# query_searches 統合テスト（tobi/qmd 風 typed searches、MCP query ツール用）
+# ---------------------------------------------------------------------------
+
+
+def test_query_searches_lex_hits(trigram_conn):
+    """type=lex の searches で trigram 検索がヒットする。"""
+    results = query_searches(trigram_conn, [("lex", "形態素解析")])
+    assert len(results) >= 1
+    assert any("a.md" in r.filepath for r in results)
+
+
+def test_query_searches_empty_returns_empty(trigram_conn):
+    """searches が空リストなら空を返す。"""
+    assert query_searches(trigram_conn, []) == []
+
+
+def test_query_searches_invalid_type_raises(trigram_conn):
+    """type が lex/vec/hyde 以外なら ValueError。"""
+    with pytest.raises(ValueError):
+        query_searches(trigram_conn, [("bogus", "テスト")])
+
+
+def test_query_searches_vec_ignored_without_vec_index(trigram_conn):
+    """vec_indexed が立っていない場合、type=vec は無視され結果は空（vsearch 未呼び出し）。"""
+    results = query_searches(trigram_conn, [("vec", "形態素解析")])
+    assert results == []
+
+
+def test_query_searches_limit(trigram_conn):
+    """limit で返却件数が制限される。"""
+    results = query_searches(trigram_conn, [("lex", "す")], limit=1)
+    assert len(results) <= 1
+
+
+def test_query_searches_collections_filter(conn, tmp_path):
+    """collections（OR リスト）でコレクション絞り込みができる。"""
+    d1, d2 = tmp_path / "col1", tmp_path / "col2"
+    d1.mkdir()
+    d2.mkdir()
+    add_collection(conn, "col1", str(d1))
+    add_collection(conn, "col2", str(d2))
+    upsert_document(
+        conn,
+        collection="col1",
+        path="a.md",
+        body="日本語処理の解説",
+        title="A",
+        mtime=1000,
+    )
+    upsert_document(
+        conn,
+        collection="col2",
+        path="b.md",
+        body="日本語処理は重要です",
+        title="B",
+        mtime=1001,
+    )
+    conn.commit()
+    set_meta(conn, "trigram_indexed", "1")
+    conn.commit()
+
+    results = query_searches(conn, [("lex", "日本語")], collections=["col1"])
+    assert results
+    assert all(r.filepath.startswith("col1/") for r in results)
+
+
+def test_query_searches_first_search_weighted(hybrid_conn):
+    """先頭 search の weight=2.0 により、先頭のみヒットする docid が優先される。
+
+    trigram/morph 両方に "サーバー" を含む c.md がある状況で、
+    先頭 lex search と後続 lex search で異なる語を与えたとき、
+    先頭側でのみ強くヒットする文書が上位に来ることを確認する。
+    """
+    results = query_searches(
+        hybrid_conn,
+        [("lex", "サーバー"), ("lex", "検索エンジン")],
+        rerank_enabled=False,
+    )
+    assert results
+    # 両方の語に関連するため c.md（サーバー）/ b.md（検索エンジン）が含まれる
+    filepaths = [r.filepath for r in results]
+    assert any("c.md" in fp for fp in filepaths)
+
+
+def test_query_searches_no_rerank(trigram_conn):
+    """rerank_enabled=False でも動作する（恒等フォールバック）。"""
+    results = query_searches(
+        trigram_conn, [("lex", "形態素解析")], rerank_enabled=False
+    )
+    assert len(results) >= 1
