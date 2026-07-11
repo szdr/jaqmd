@@ -26,11 +26,11 @@ Phase D  MCP サーバー (mcp)                ← 検索機能を MCP ツール
 
 ---
 
-## Phase 0: 冪等スキーマ初期化基盤（前提）
+## Phase 0: 冪等スキーマ初期化基盤（前提）✅ 完了
 
 **方針:** マイグレーション機構は採用しない。tobi/qmd の `initializeDatabase()` 方式を採用し、接続のたびに `schema.sql` を無条件実行することで、後フェーズで追記した新テーブルが既存DBへ自動反映される設計にする。
 
-### 作業単位 0-1: 冪等初期化への移行
+### 作業単位 0-1: 冪等初期化への移行 ✅
 - `schema.sql`: 全 `CREATE TABLE`/`CREATE INDEX`/`CREATE VIRTUAL TABLE` を `IF NOT EXISTS` 付きに変更。全トリガーを `DROP TRIGGER IF EXISTS <name>;` + `CREATE TRIGGER <name> ...` 形式に変更（Phase A でトリガー本体に morph DELETE 行を追記したとき、既存DBへ確実に反映するため）。
 - `store.py:_ensure_schema()`: `index_meta` 存在チェックと `schema_version` INSERT を削除し、毎回 `executescript(schema.sql)` を実行する形に簡略化。`connect()` から呼ぶ構造は維持。`schema_version` の概念は廃止（`index_meta` テーブルと `get_meta`/`set_meta` は `morph_indexed` 等で引き続き使用するため存続）。
 - `src/jaqmd/migrations/` は**新設しない**。
@@ -39,30 +39,30 @@ Phase D  MCP サーバー (mcp)                ← 検索機能を MCP ツール
 
 ---
 
-## Phase A: 形態素検索（morph / mosearch）
+## Phase A: 形態素検索（morph / mosearch）✅ 完了
 
 ONNX 不要・追加依存は `sudachipy` + `sudachidict-core`（`pyproject.toml` の `[morph]` extras に既存）。
 
-### 作業単位 A-1: morph FTS スキーマ
+### 作業単位 A-1: morph FTS スキーマ ✅
 - `schema.sql` に `docs_fts_morph`（`CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts_morph USING fts5(...)`, `tokenize='unicode61'`, カラムは trigram 版と同構成）を追記。
 - **同期方針（AGENTS.md 厳守）**: INSERT はトリガーで同期しない（SudachiPy をトリガー内で呼べないため）。一方 **DELETE 系は安全**なので、`documents_soft_delete` / `documents_au_hash` / `documents_delete` トリガー（`schema.sql` 内）に `docs_fts_morph` からの削除を追記する。Phase 0 で導入した DROP+CREATE 方式により、接続時に既存DBへ自動反映される。INSERT は `jaqmd morph` 実行時に Python で行う。
 
-### 作業単位 A-2: 形態素トークナイザ
+### 作業単位 A-2: 形態素トークナイザ ✅
 - `src/jaqmd/tokenize/morph.py` を新設。SudachiPy ラッパー。`tokenize/trigram.py` と同じく「分かち書き関数 + FTS クエリ変換関数」の2関数構成にする。
 - **インデックス側とクエリ側で同一の正規化・分かち書き**を通すこと（AGENTS.md mosearch 節）。正規化形（normalized_form）の採用可否をここで決める。
 - `sudachipy` は optional import（未インストール時は明確なエラーで `pip install 'jaqmd[morph]'` を案内）。Tokenizer はモジュールレベルでキャッシュ（生成コスト大）。
 
-### 作業単位 A-3: `jaqmd morph` コマンド実装
+### 作業単位 A-3: `jaqmd morph` コマンド実装 ✅
 - `cli.py:359-367` のスタブを置換。`update` コマンド（`cli.py:84-134`）の構造を踏襲: 全 active ドキュメントの本文を取得 → `morph.py` で分かち書き → `docs_fts_morph` に INSERT。
 - 完了後 `set_meta(conn, "morph_indexed", "1")`、`set_meta(conn, "morph_tokenizer", ...)` を記録（`store.py:173` の既存関数を再利用）。
 - 再実行時は `docs_fts_morph` を作り直す（DELETE → 再投入）冪等な実装にする。
 
-### 作業単位 A-4: mosearch 検索ロジック + CLI 配線
+### 作業単位 A-4: mosearch 検索ロジック + CLI 配線 ✅
 - `src/jaqmd/search/mosearch.py` を新設。`trisearch.py` をテンプレートに、クエリを `morph.py` で分かち書き → `docs_fts_morph MATCH` で BM25。**戻り値は既存 `SearchResult` dataclass を再利用**（`format.py` がそのまま使える）。
 - `cli.py:381-392` の `mosearch` スタブを置換。`_run_search`（`cli.py:141-178`）と同等の出力オプション群（`-n/-c/--min-score/--all/--full/--json/--md/--xml/--files`）を持たせる。事前要件チェックは `get_meta(conn, "morph_indexed")`、未構築なら「`jaqmd morph` を実行してください」と案内（既存 `_run_search` のエラーパターン踏襲）。
 - `_run_search` を検索バックエンド差し替え可能に一般化して mosearch/vsearch と共有するのが望ましい。
 
-### 作業単位 A-5: テスト
+### 作業単位 A-5: テスト ✅
 - `test_morph_tokenize.py`: 分かち書き・正規化の単体テスト。
 - `test_mosearch.py`: 表記ゆれ（サーバー/サーバ、第1条/第一条）が trigram と異なる挙動でマッチすること（AGENTS.md テスト方針）。
 - `test_cli.py` 拡張: `morph` 実行 → `mosearch` 成功、未実行時の案内エラー。
@@ -70,35 +70,35 @@ ONNX 不要・追加依存は `sudachipy` + `sudachidict-core`（`pyproject.toml
 
 ---
 
-## Phase B: ベクトル検索（embed / vsearch）
+## Phase B: ベクトル検索（embed / vsearch）✅ 完了
 
 追加依存は `fastembed`（`[vector]` extras に既存）。`sqlite-vec` はコア依存に既存だが**未ロード**——`store.connect()` で拡張ロードが必要。
 
-### 作業単位 B-1: ベクトルスキーマ + sqlite-vec ロード
+### 作業単位 B-1: ベクトルスキーマ + sqlite-vec ロード ✅
 - `schema.sql` に `chunk_vectors`（AGENTS.md スキーマ、`CREATE TABLE IF NOT EXISTS`）を追記。
 - `vectors_vec`（`vec0`）は **Phase 0 の vec0 例外**に従い `schema.sql` には含めない。`store.py:connect()` で sqlite-vec 拡張ロード後に `CREATE VIRTUAL TABLE IF NOT EXISTS vectors_vec USING vec0(embedding float[768])` を実行する。
 - `store.py:13-19` `connect()` に `import sqlite_vec; conn.enable_load_extension(True); sqlite_vec.load(conn)` を追加（vec0 仮想テーブル利用に必須）。拡張を使えない環境向けにエラーハンドリング。
 
-### 作業単位 B-2: チャンク分割
+### 作業単位 B-2: チャンク分割 ✅
 - `src/jaqmd/chunk.py` を新設。AGENTS.md チャンク戦略: 800トークン・15%オーバーラップ・文境界（。！？）優先。トークン基準は ruri-v3 トークナイザ。
 - 戻り値は `(chunk_seq, chunk_pos, chunk_text)` のリスト。純粋関数として単体テスト可能に。
 
-### 作業単位 B-3: embedding ラッパー
+### 作業単位 B-3: embedding ラッパー ✅
 - `src/jaqmd/embed.py` を新設。AGENTS.md「fastembed の使い方」節の `TextEmbedding.add_custom_model(...)`（`cl-nagoya/ruri-v3-310m`, MEAN, 768次元）をそのまま使用。
 - **prefix を自前付与**（fastembed は自動化しない）: 文書 `検索文書: ` / クエリ `検索クエリ: `。付与漏れ検出テストを置く（AGENTS.md テスト方針）。
 - モデルは `~/.cache/jaqmd/models/` にDL。`fastembed` は optional import。
 
-### 作業単位 B-4: `jaqmd embed` コマンド実装
+### 作業単位 B-4: `jaqmd embed` コマンド実装 ✅
 - `cli.py:370-378` のスタブを置換。active ドキュメント本文 → `chunk.py` で分割 → `embed.py` で文書 prefix 付きベクトル化 → `chunk_vectors` + `vectors_vec` に投入。
 - `-f` フラグ（既存ベクトルの再生成）を AGENTS.md コマンド体系に合わせて実装。
 - 完了後 `set_meta` で `vec_indexed=1`, `embed_model`, `embed_dim=768` を記録。
 
-### 作業単位 B-5: vsearch 検索ロジック + CLI 配線
+### 作業単位 B-5: vsearch 検索ロジック + CLI 配線 ✅
 - `src/jaqmd/search/vsearch.py` を新設。クエリに `検索クエリ: ` を付け embedding → `vectors_vec` を KNN（`vec0` の `MATCH`/`k`）→ `chunk_vectors` 経由で docid 解決 → `SearchResult` に整形（chunk_text をスニペットに）。
 - `cli.py:395-405` の `vsearch` スタブを置換。事前要件は `vec_indexed`、未構築なら `jaqmd embed` を案内。
 - `status`（`cli.py:293-336`）と `get_stats`（`store.py:181-197`）は既に morph/vec を考慮済みなので、メタが立てば自動で ✓ 表示される。
 
-### 作業単位 B-6: テスト
+### 作業単位 B-6: テスト ✅
 - `test_chunk.py`: 分割境界・オーバーラップの単体テスト（モデル不要）。
 - `test_embed.py`: prefix 付与の検証（embedding 本体はモック or `importorskip`）。
 - ベクトル検索の統合テストは重いので `@pytest.mark.integration` で分離し、CI 既定はスキップ。
