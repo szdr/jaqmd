@@ -6,13 +6,15 @@ import dataclasses
 import sys
 from typing import Optional, TYPE_CHECKING
 
-from .modelcache import MODEL_CACHE_DIR, is_model_cached
+from .config import settings
+from .modelcache import is_model_cached
+from .paths import models_dir
 from .progress import NULL_REPORTER, ProgressReporter
 
 if TYPE_CHECKING:
     from .search.trisearch import SearchResult
 
-RERANK_TOP_K = 50
+RERANK_TOP_K = settings.rerank_top_k
 
 DEFAULT_RERANKER = "default"
 
@@ -21,7 +23,7 @@ DEFAULT_RERANKER = "default"
 # モデルごとに登録メタ情報を分けて持つ。
 RERANKER_MODELS: dict[str, dict] = {
     "default": {
-        "hf": "szdr/ruri-v3-reranker-310m-onnx",
+        "hf": settings.reranker_model,
         "model_file": "model.onnx",
         "additional_files": ["model.onnx.data"],
     },
@@ -70,8 +72,7 @@ def _get_encoder(model: str = DEFAULT_RERANKER, reporter: Optional[ProgressRepor
         return None
 
     spec = RERANKER_MODELS[model]
-    cache_dir = MODEL_CACHE_DIR
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir = models_dir()
     label = f"Reranker モデル({model})をロード中"
     if not is_model_cached(spec["hf"], spec["model_file"], str(cache_dir)):
         label += "(初回はダウンロードのため数分かかる場合があります)"

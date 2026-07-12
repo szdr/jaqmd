@@ -9,13 +9,14 @@ import time
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional
 
+from .config import settings
+from .paths import models_dir
 from .progress import NULL_REPORTER, ProgressReporter
 from .store import get_qe_cache, set_qe_cache
 
-QE_MODEL_REPO = "szdr/jaqmd-qe-gemma-4-e2b-it"
+QE_MODEL_REPO = settings.qe_repo
 QE_MODEL_FILE = "gguf/gemma-4-e2b-it.Q4_K_M.gguf"
 QE_MODEL_ID = QE_MODEL_REPO  # qe_cache.model_id に記録する識別子
 
@@ -76,8 +77,7 @@ def _get_llm(reporter: Optional[ProgressReporter] = None):
         return None
 
     try:
-        cache_dir = Path.home() / ".cache" / "jaqmd" / "models"
-        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_dir = models_dir()
 
         # ダウンロード（未キャッシュ時のみ発生）は huggingface_hub 標準の進捗バーで
         # 可視化されるよう、ネイティブログの抑制対象からは外す。

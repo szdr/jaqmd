@@ -6,6 +6,7 @@ from typing import Optional
 
 import typer
 
+from .config import settings
 from .format import format_results
 from .progress import ProgressReporter
 from .scan import scan_collection
@@ -46,9 +47,12 @@ def main() -> None:
 def collection_add(
     path: str = typer.Argument(..., help="コレクションのディレクトリパス"),
     name: str = typer.Option(..., "--name", "-n", help="コレクション名"),
-    glob: str = typer.Option("**/*.md", "--glob", help="glob パターン"),
+    glob: Optional[str] = typer.Option(
+        None, "--glob", help="glob パターン（既定: 設定/環境変数、未指定なら **/*.md）"
+    ),
 ) -> None:
     """コレクションを追加します。"""
+    glob = glob if glob is not None else settings.index_glob
     p = Path(path).expanduser().resolve()
     if not p.is_dir():
         typer.echo(f"エラー: ディレクトリが存在しません: {path}", err=True)
@@ -95,9 +99,12 @@ def update(
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
+    quiet: Optional[bool] = typer.Option(
+        None, "--quiet/--no-quiet", "-q", help="進捗表示を抑制（既定: 設定/環境変数）"
+    ),
 ) -> None:
     """ファイルをスキャンして trigram FTS インデックスを構築します。"""
+    quiet = quiet if quiet is not None else settings.quiet
     reporter = ProgressReporter(enabled=sys.stderr.isatty() and not quiet)
     conn = connect()
     if collection:
@@ -176,16 +183,16 @@ def _format_expansion(exp) -> str:
 def _run_search(
     query: str,
     *,
-    n: int,
+    n: Optional[int],
     collection: Optional[str],
     min_score: Optional[float],
     all_results: bool,
-    full: bool,
+    full: Optional[bool],
     json_out: bool,
     md: bool,
     xml: bool,
     files: bool,
-    quiet: bool = False,
+    quiet: Optional[bool] = None,
     search_fn=None,
     meta_key: str = "trigram_indexed",
     meta_missing_msg: str = (
@@ -195,6 +202,12 @@ def _run_search(
     search_kwargs: Optional[dict] = None,
     collect_qe: bool = False,
 ) -> None:
+    # Tier1 設定値の解決: CLI 引数（None でなければ）> 環境変数 > 設定ファイル > 既定
+    n = n if n is not None else settings.search_n
+    full = full if full is not None else settings.search_full
+    min_score = min_score if min_score is not None else settings.search_min_score
+    quiet = quiet if quiet is not None else settings.quiet
+
     conn = connect()
     if get_meta(conn, meta_key) != "1":
         typer.echo(meta_missing_msg, err=True)
@@ -221,7 +234,6 @@ def _run_search(
         **kwargs,
     )
 
-    fmt = "default"
     if json_out:
         fmt = "json"
     elif md:
@@ -230,6 +242,9 @@ def _run_search(
         fmt = "xml"
     elif files:
         fmt = "files"
+    else:
+        # 出力形式フラグが未指定の場合のみ設定値（既定 "plain"）を採用する
+        fmt = settings.search_format
 
     typer.echo(format_results(results, fmt=fmt, full=full))
 
@@ -242,18 +257,24 @@ def _run_search(
 @app.command(name="search")
 def search_command(
     query: str = typer.Argument(..., help="検索クエリ"),
-    n: int = typer.Option(5, "-n", help="結果件数"),
+    n: Optional[int] = typer.Option(None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
-    min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
+    min_score: Optional[float] = typer.Option(
+        None, "--min-score", help="スコア閾値（既定: 設定/環境変数）"
+    ),
     all_results: bool = typer.Option(False, "--all", help="全件返却"),
-    full: bool = typer.Option(False, "--full", help="全文表示"),
+    full: Optional[bool] = typer.Option(
+        None, "--full/--no-full", help="全文表示（既定: 設定/環境変数）"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON 出力"),
     md: bool = typer.Option(False, "--md", help="Markdown 出力"),
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
+    quiet: Optional[bool] = typer.Option(
+        None, "--quiet/--no-quiet", "-q", help="進捗表示を抑制（既定: 設定/環境変数）"
+    ),
 ) -> None:
     """trigram BM25 検索を実行します。"""
     _run_search(
@@ -442,7 +463,9 @@ def morph(
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
+    quiet: Optional[bool] = typer.Option(
+        None, "--quiet/--no-quiet", "-q", help="進捗表示を抑制（既定: 設定/環境変数）"
+    ),
 ) -> None:
     """形態素解析インデックスを構築します。"""
     try:
@@ -451,6 +474,7 @@ def morph(
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
 
+    quiet = quiet if quiet is not None else settings.quiet
     reporter = ProgressReporter(enabled=sys.stderr.isatty() and not quiet)
     conn = connect()
     if get_meta(conn, "trigram_indexed") != "1":
@@ -537,8 +561,12 @@ def embed(
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
-    batch_size: int = typer.Option(1, "--batch-size", help="embedding のバッチサイズ"),
+    quiet: Optional[bool] = typer.Option(
+        None, "--quiet/--no-quiet", "-q", help="進捗表示を抑制（既定: 設定/環境変数）"
+    ),
+    batch_size: Optional[int] = typer.Option(
+        None, "--batch-size", help="embedding のバッチサイズ（既定: 設定/環境変数、未指定なら1）"
+    ),
 ) -> None:
     """ベクトルインデックスを構築します。"""
     try:
@@ -548,6 +576,8 @@ def embed(
         typer.echo(str(e), err=True)
         raise typer.Exit(1)
 
+    quiet = quiet if quiet is not None else settings.quiet
+    batch_size = batch_size if batch_size is not None else settings.index_batch_size
     reporter = ProgressReporter(enabled=sys.stderr.isatty() and not quiet)
     conn = connect()
 
@@ -691,18 +721,24 @@ def embed(
 @app.command()
 def mosearch(
     query: str = typer.Argument(..., help="検索クエリ"),
-    n: int = typer.Option(5, "-n", help="結果件数"),
+    n: Optional[int] = typer.Option(None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
-    min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
+    min_score: Optional[float] = typer.Option(
+        None, "--min-score", help="スコア閾値（既定: 設定/環境変数）"
+    ),
     all_results: bool = typer.Option(False, "--all", help="全件返却"),
-    full: bool = typer.Option(False, "--full", help="全文表示"),
+    full: Optional[bool] = typer.Option(
+        None, "--full/--no-full", help="全文表示（既定: 設定/環境変数）"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON 出力"),
     md: bool = typer.Option(False, "--md", help="Markdown 出力"),
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
+    quiet: Optional[bool] = typer.Option(
+        None, "--quiet/--no-quiet", "-q", help="進捗表示を抑制（既定: 設定/環境変数）"
+    ),
 ) -> None:
     """形態素 BM25 検索を実行します。"""
     _run_search(
@@ -729,18 +765,24 @@ def mosearch(
 @app.command()
 def vsearch(
     query: str = typer.Argument(..., help="検索クエリ"),
-    n: int = typer.Option(5, "-n", help="結果件数"),
+    n: Optional[int] = typer.Option(None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
-    min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
+    min_score: Optional[float] = typer.Option(
+        None, "--min-score", help="スコア閾値（既定: 設定/環境変数）"
+    ),
     all_results: bool = typer.Option(False, "--all", help="全件返却"),
-    full: bool = typer.Option(False, "--full", help="全文表示"),
+    full: Optional[bool] = typer.Option(
+        None, "--full/--no-full", help="全文表示（既定: 設定/環境変数）"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON 出力"),
     md: bool = typer.Option(False, "--md", help="Markdown 出力"),
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
+    quiet: Optional[bool] = typer.Option(
+        None, "--quiet/--no-quiet", "-q", help="進捗表示を抑制（既定: 設定/環境変数）"
+    ),
 ) -> None:
     """ベクトル意味検索を実行します。"""
     _run_search(
@@ -767,25 +809,38 @@ def vsearch(
 @app.command()
 def query(
     q: str = typer.Argument(..., help="検索クエリ"),
-    n: int = typer.Option(5, "-n", help="結果件数"),
+    n: Optional[int] = typer.Option(None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
-    min_score: Optional[float] = typer.Option(None, "--min-score", help="スコア閾値"),
+    min_score: Optional[float] = typer.Option(
+        None, "--min-score", help="スコア閾値（既定: 設定/環境変数）"
+    ),
     all_results: bool = typer.Option(False, "--all", help="全件返却"),
-    full: bool = typer.Option(False, "--full", help="全文表示"),
+    full: Optional[bool] = typer.Option(
+        None, "--full/--no-full", help="全文表示（既定: 設定/環境変数）"
+    ),
     json_out: bool = typer.Option(False, "--json", help="JSON 出力"),
     md: bool = typer.Option(False, "--md", help="Markdown 出力"),
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
-    no_rerank: bool = typer.Option(False, "--no-rerank", help="reranker を無効化"),
-    reranker: str = typer.Option(
-        "default", "--reranker", help="reranker モデル (default|int8)"
+    no_rerank: bool = typer.Option(
+        False, "--no-rerank", help="reranker を無効化（設定で無効化済みの場合は JAQMD_SEARCH_RERANK=true で再度有効化可能）"
     ),
-    no_qe: bool = typer.Option(False, "--no-qe", help="Query Expansion を無効化"),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="進捗表示を抑制"),
+    reranker: Optional[str] = typer.Option(
+        None, "--reranker", help="reranker モデル (default|int8)（既定: 設定/環境変数）"
+    ),
+    no_qe: bool = typer.Option(
+        False, "--no-qe", help="Query Expansion を無効化（設定で無効化済みの場合は JAQMD_SEARCH_QE=true で再度有効化可能）"
+    ),
+    quiet: Optional[bool] = typer.Option(
+        None, "--quiet/--no-quiet", "-q", help="進捗表示を抑制（既定: 設定/環境変数）"
+    ),
 ) -> None:
     """ハイブリッド検索（RRF 融合: trigram / morph / vector）。"""
+    reranker = reranker if reranker is not None else settings.search_reranker
+    rerank_enabled = settings.search_rerank and not no_rerank
+    qe_enabled = settings.search_qe and not no_qe
     _run_search(
         q,
         n=n,
@@ -805,9 +860,9 @@ def query(
             "→ `jaqmd update` を実行してください。"
         ),
         search_kwargs={
-            "rerank_enabled": not no_rerank,
+            "rerank_enabled": rerank_enabled,
             "rerank_model": reranker,
-            "qe_enabled": not no_qe,
+            "qe_enabled": qe_enabled,
         },
         collect_qe=True,
     )

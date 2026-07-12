@@ -5,13 +5,14 @@ import sqlite3
 from typing import Callable, Optional
 
 from .trisearch import SearchResult, trisearch
+from ..config import settings
 from ..store import get_meta
 from ..rerank import rerank, RERANK_TOP_K, DEFAULT_RERANKER
 from ..qe import expand as qe_expand, ExpansionResult
 from ..progress import NULL_REPORTER, ProgressReporter
 
-# AGENTS.md 準拠: RRF パラメータ k=60
-RRF_K = 60
+# AGENTS.md 準拠: RRF パラメータ既定 k=60（JAQMD_TUNING_RRF_K / 設定ファイルで変更可能）
+RRF_K = settings.rrf_k
 
 
 def _minmax_scale(results: list[SearchResult]) -> list[SearchResult]:

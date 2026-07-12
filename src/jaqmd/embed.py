@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Optional
 
-from .modelcache import MODEL_CACHE_DIR, is_model_cached
+from .config import settings
+from .modelcache import is_model_cached
+from .paths import models_dir
 from .progress import NULL_REPORTER, ProgressReporter
 
-EMBED_MODEL = "sirasagi62/ruri-v3-310m-ONNX"
+EMBED_MODEL = settings.embed_model
 EMBED_DIM = 768
 DOC_PREFIX = "検索文書: "
 QUERY_PREFIX = "検索クエリ: "
@@ -26,10 +28,9 @@ def _get_model(reporter: Optional[ProgressReporter] = None):
             ) from e
 
         reporter = reporter or NULL_REPORTER
-        cache_dir = MODEL_CACHE_DIR
-        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_dir = models_dir()
         label = "Embedding モデルをロード中"
-        if not is_model_cached("sirasagi62/ruri-v3-310m-ONNX", "onnx/model.onnx", str(cache_dir)):
+        if not is_model_cached(EMBED_MODEL, "onnx/model.onnx", str(cache_dir)):
             label += "（初回はダウンロードのため数分かかる場合があります）"
         with reporter.step(label):
             # ruri-v3-310m のカスタムモデル登録（ONNX 版）
@@ -37,7 +38,7 @@ def _get_model(reporter: Optional[ProgressReporter] = None):
                 model=EMBED_MODEL,
                 pooling=PoolingType.MEAN,
                 normalization=True,
-                sources=ModelSource(hf="sirasagi62/ruri-v3-310m-ONNX"),
+                sources=ModelSource(hf=EMBED_MODEL),
                 dim=EMBED_DIM,
                 model_file="onnx/model.onnx",
             )

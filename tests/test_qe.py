@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from jaqmd.qe import ExpansionResult, _extract_json, expand
+from jaqmd.qe import QE_MODEL_ID, ExpansionResult, _extract_json, expand
 from jaqmd.store import get_qe_cache
 
 
@@ -86,7 +86,7 @@ def test_expand_cache_miss_then_hit(conn, monkeypatch):
     import hashlib
 
     query_hash = hashlib.sha256("木魚".encode("utf-8")).hexdigest()
-    row = get_qe_cache(conn, query_hash, "szdr/jaqmd-qe-gemma-4-e2b-it")
+    row = get_qe_cache(conn, query_hash, QE_MODEL_ID)
     assert row is not None
     assert row["query_raw"] == "木魚"
 

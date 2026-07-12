@@ -132,6 +132,80 @@ jaqmd query "日本語の検索エンジンを作りたい"
 --no-qe           （query のみ）Query Expansion を無効化し raw クエリのまま検索する
 ```
 
+## 設定（環境変数・設定ファイル）
+
+コマンドの挙動を変える設定値は、CLI 引数だけでなく環境変数・設定ファイルでも指定できます。優先順位は次のとおりです。
+
+```
+CLI 引数 > 環境変数 > 設定ファイル > 既定値
+```
+
+設定ファイルは `$XDG_CONFIG_HOME/jaqmd/config.toml`（`XDG_CONFIG_HOME` 未設定時は `~/.config/jaqmd/config.toml`）を TOML 形式で読み込みます。
+
+```toml
+[search]
+n = 10
+format = "md"       # plain|json|md|xml|files
+full = false
+min_score = 0.2
+reranker = "default" # default|int8
+rerank = true
+qe = true
+
+[index]
+glob = "**/*.md"
+batch_size = 4
+
+[general]
+quiet = false
+
+[paths]
+db = "/data/jaqmd/index.sqlite"
+models = "/data/jaqmd/models"
+
+[models]
+embed = "sirasagi62/ruri-v3-310m-ONNX"
+reranker = "szdr/ruri-v3-reranker-310m-onnx"
+qe_repo = "szdr/jaqmd-qe-gemma-4-e2b-it"
+
+[tuning]
+rrf_k = 60
+rerank_top_k = 50
+```
+
+### 検索コマンドの既定値（CLI フラグと対応）
+
+| 環境変数 | 設定ファイル | 既定値 | 対応する CLI フラグ |
+|---|---|---|---|
+| `JAQMD_SEARCH_N` | `[search] n` | `5` | `-n` |
+| `JAQMD_SEARCH_FORMAT` | `[search] format` | `plain` | `--json`/`--md`/`--xml`/`--files` |
+| `JAQMD_SEARCH_FULL` | `[search] full` | `false` | `--full`/`--no-full` |
+| `JAQMD_SEARCH_MIN_SCORE` | `[search] min_score` | (なし) | `--min-score` |
+| `JAQMD_SEARCH_RERANKER` | `[search] reranker` | `default` | `--reranker`（query のみ） |
+| `JAQMD_SEARCH_RERANK` | `[search] rerank` | `true` | `--no-rerank`（query のみ、無効化専用） |
+| `JAQMD_SEARCH_QE` | `[search] qe` | `true` | `--no-qe`（query のみ、無効化専用） |
+| `JAQMD_INDEX_GLOB` | `[index] glob` | `**/*.md` | `--glob`（collection add） |
+| `JAQMD_INDEX_BATCH_SIZE` | `[index] batch_size` | `1` | `--batch-size`（embed） |
+| `JAQMD_QUIET` | `[general] quiet` | `false` | `--quiet`/`--no-quiet`, `-q` |
+
+`--no-rerank` / `--no-qe` は無効化専用のフラグです。設定ファイルや環境変数で `rerank`/`qe` を `false` にした場合、CLI から強制的に再度有効化するには `JAQMD_SEARCH_RERANK=true` / `JAQMD_SEARCH_QE=true` を都度指定してください（env は設定ファイルより優先されます）。
+
+### エンジン設定（CLI フラグなし・env/設定ファイル専用）
+
+モデル名・パス・チューニング値は CLI フラグを持たず、環境変数または設定ファイルでのみ変更できます。
+
+| 環境変数 | 設定ファイル | 既定値 |
+|---|---|---|
+| `JAQMD_DB_PATH` | `[paths] db` | `$XDG_CACHE_HOME/jaqmd/index.sqlite` |
+| `JAQMD_MODELS_DIR` | `[paths] models` | `$XDG_CACHE_HOME/jaqmd/models` |
+| `JAQMD_MODELS_EMBED` | `[models] embed` | `sirasagi62/ruri-v3-310m-ONNX` |
+| `JAQMD_MODELS_RERANKER` | `[models] reranker` | `szdr/ruri-v3-reranker-310m-onnx` |
+| `JAQMD_MODELS_QE_REPO` | `[models] qe_repo` | `szdr/jaqmd-qe-gemma-4-e2b-it` |
+| `JAQMD_TUNING_RRF_K` | `[tuning] rrf_k` | `60` |
+| `JAQMD_TUNING_RERANK_TOP_K` | `[tuning] rerank_top_k` | `50` |
+
+これらの値はプロセス起動時（`jaqmd` コマンド実行時）に一度だけ解決されます。
+
 ## 検索方式の使い分け
 
 - **search**: 固有名詞・型番・コードなど正確なキーワードがわかっているとき。辞書不要で最速。

@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-MODEL_CACHE_DIR = Path.home() / ".cache" / "jaqmd" / "models"
-
 
 def is_model_cached(repo_id: str, filename: str, cache_dir: str) -> bool:
     """指定モデルファイルが HF hub キャッシュに存在するか判定する。
