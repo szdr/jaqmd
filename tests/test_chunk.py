@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from jaqmd.chunk import chunk_document, _split_sentences
+from jaqmd.chunk import _split_sentences, chunk_document
 
 
 # 軽量なトークンカウンタ（文字数ベース）

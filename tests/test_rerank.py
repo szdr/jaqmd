@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from jaqmd.rerank import _doc_text, rerank
 from jaqmd.search.trisearch import SearchResult
-from jaqmd.rerank import rerank, _doc_text
 
 
 def _make_result(
@@ -62,7 +62,9 @@ def test_rerank_empty_results():
 
 
 def test_rerank_no_encoder_returns_identity(monkeypatch):
-    monkeypatch.setattr("jaqmd.rerank._get_encoder", lambda model=None, reporter=None: None)
+    monkeypatch.setattr(
+        "jaqmd.rerank._get_encoder", lambda model=None, reporter=None: None
+    )
     results = [_make_result("a"), _make_result("b")]
     out = rerank("q", results)
     assert out == results
@@ -87,7 +89,9 @@ def test_rerank_reorders_by_encoder_score(monkeypatch):
     ]
     # b が最も高スコアになるようにする
     encoder = _DummyEncoder({"a本文": 0.1, "b本文": 0.9, "c本文": 0.5})
-    monkeypatch.setattr("jaqmd.rerank._get_encoder", lambda model=None, reporter=None: encoder)
+    monkeypatch.setattr(
+        "jaqmd.rerank._get_encoder", lambda model=None, reporter=None: encoder
+    )
 
     out = rerank("q", results, top_k=None)
     assert [r.docid for r in out] == ["b", "c", "a"]
@@ -104,7 +108,9 @@ def test_rerank_top_k_splits_head_and_tail(monkeypatch):
     ]
     # head = [a, b]（top_k=2）が再スコア対象。b がトップになるよう仕込む。
     encoder = _DummyEncoder({"a本文": 0.2, "b本文": 0.8})
-    monkeypatch.setattr("jaqmd.rerank._get_encoder", lambda model=None, reporter=None: encoder)
+    monkeypatch.setattr(
+        "jaqmd.rerank._get_encoder", lambda model=None, reporter=None: encoder
+    )
 
     out = rerank("q", results, top_k=2)
     # head 部分は再スコアされ b が先頭、tail の c はそのまま末尾に温存
@@ -120,7 +126,9 @@ def test_rerank_top_k_splits_head_and_tail(monkeypatch):
 def test_rerank_respects_n_after_reorder(monkeypatch):
     results = [_make_result("a", body="a"), _make_result("b", body="b")]
     encoder = _DummyEncoder({"a": 0.1, "b": 0.9})
-    monkeypatch.setattr("jaqmd.rerank._get_encoder", lambda model=None, reporter=None: encoder)
+    monkeypatch.setattr(
+        "jaqmd.rerank._get_encoder", lambda model=None, reporter=None: encoder
+    )
 
     out = rerank("q", results, n=1)
     assert len(out) == 1

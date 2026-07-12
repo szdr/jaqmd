@@ -78,10 +78,20 @@ def test_run_query_collections_filter(conn, tmp_path):
     add_collection(conn, "col1", str(d1))
     add_collection(conn, "col2", str(d2))
     upsert_document(
-        conn, collection="col1", path="a.md", body="日本語処理の解説", title="A", mtime=1000
+        conn,
+        collection="col1",
+        path="a.md",
+        body="日本語処理の解説",
+        title="A",
+        mtime=1000,
     )
     upsert_document(
-        conn, collection="col2", path="b.md", body="日本語処理は重要です", title="B", mtime=1001
+        conn,
+        collection="col2",
+        path="b.md",
+        body="日本語処理は重要です",
+        title="B",
+        mtime=1001,
     )
     conn.commit()
     set_meta(conn, "trigram_indexed", "1")
@@ -180,7 +190,9 @@ def test_run_status_shape(trigram_conn):
     assert status["morph_indexed"] is False
     assert status["vec_indexed"] is False
     assert "search" in status["available"]
-    assert any(c["name"] == "test" and c["documents"] == 2 for c in status["collections"])
+    assert any(
+        c["name"] == "test" and c["documents"] == 2 for c in status["collections"]
+    )
 
 
 def test_run_status_empty_db(conn):

@@ -1,6 +1,7 @@
 import pytest
-from jaqmd.store import add_collection, set_meta, upsert_document
+
 from jaqmd.search.trisearch import trisearch
+from jaqmd.store import add_collection, set_meta, upsert_document
 
 
 @pytest.fixture

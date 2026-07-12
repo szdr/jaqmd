@@ -1,5 +1,6 @@
 import pytest
 from typer.testing import CliRunner
+
 from jaqmd.cli import app
 
 runner = CliRunner()

@@ -4,12 +4,13 @@ import dataclasses
 import sqlite3
 from typing import Callable, Optional
 
-from .trisearch import SearchResult, trisearch
 from ..config import settings
-from ..store import get_meta
-from ..rerank import rerank, RERANK_TOP_K, DEFAULT_RERANKER
-from ..qe import expand as qe_expand, ExpansionResult
 from ..progress import NULL_REPORTER, ProgressReporter
+from ..qe import ExpansionResult
+from ..qe import expand as qe_expand
+from ..rerank import DEFAULT_RERANKER, RERANK_TOP_K, rerank
+from ..store import get_meta
+from .trisearch import SearchResult, trisearch
 
 # AGENTS.md 準拠: RRF パラメータ既定 k=60（JAQMD_TUNING_RRF_K / 設定ファイルで変更可能）
 RRF_K = settings.rrf_k
@@ -305,7 +306,9 @@ def query_searches(
                 weights.append(weight)
 
         else:
-            raise ValueError(f"未知の search type です: {stype!r}（lex/vec/hyde のいずれか）")
+            raise ValueError(
+                f"未知の search type です: {stype!r}（lex/vec/hyde のいずれか）"
+            )
 
     if not result_lists:
         return []
@@ -315,9 +318,7 @@ def query_searches(
     # collections フィルタ（OR）。filepath は "collection/path" 構成のため先頭セグメントで判定する。
     if collections:
         collection_set = set(collections)
-        fused = [
-            r for r in fused if r.filepath.split("/", 1)[0] in collection_set
-        ]
+        fused = [r for r in fused if r.filepath.split("/", 1)[0] in collection_set]
 
     return _finalize(
         fused,

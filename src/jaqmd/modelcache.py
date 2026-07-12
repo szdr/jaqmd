@@ -11,4 +11,6 @@ def is_model_cached(repo_id: str, filename: str, cache_dir: str) -> bool:
         from huggingface_hub import try_to_load_from_cache
     except ImportError:
         return False
-    return isinstance(try_to_load_from_cache(repo_id, filename, cache_dir=cache_dir), str)
+    return isinstance(
+        try_to_load_from_cache(repo_id, filename, cache_dir=cache_dir), str
+    )

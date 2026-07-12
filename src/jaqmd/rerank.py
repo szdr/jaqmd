@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import os
-
 import dataclasses
+import os
 import sys
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from .config import settings
 from .modelcache import is_model_cached
@@ -38,7 +37,9 @@ _encoders: dict[str, object] = {}
 _load_attempted: set[str] = set()
 
 
-def _get_encoder(model: str = DEFAULT_RERANKER, reporter: Optional[ProgressReporter] = None):
+def _get_encoder(
+    model: str = DEFAULT_RERANKER, reporter: Optional[ProgressReporter] = None
+):
     """TextCrossEncoder をロードして返す。失敗時は None（恒等フォールバック用)。
 
     fastembed 未導入・モデルロード失敗時は例外を投げず None を返す。
@@ -61,8 +62,8 @@ def _get_encoder(model: str = DEFAULT_RERANKER, reporter: Optional[ProgressRepor
     _load_attempted.add(model)
 
     try:
-        from fastembed.rerank.cross_encoder import TextCrossEncoder
         from fastembed.common.model_description import ModelSource
+        from fastembed.rerank.cross_encoder import TextCrossEncoder
     except ImportError:
         print(
             "警告: fastembed が見つかりません。reranker を無効化して続行します。\n"

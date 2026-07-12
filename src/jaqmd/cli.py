@@ -10,10 +10,10 @@ from .config import settings
 from .format import format_results
 from .progress import ProgressReporter
 from .scan import scan_collection
-from .search.trisearch import trisearch as do_trisearch
 from .search.mosearch import mosearch as do_mosearch
-from .search.vsearch import vsearch as do_vsearch
 from .search.query import query as do_query
+from .search.trisearch import trisearch as do_trisearch
+from .search.vsearch import vsearch as do_vsearch
 from .store import (
     add_collection,
     connect,
@@ -257,7 +257,9 @@ def _run_search(
 @app.command(name="search")
 def search_command(
     query: str = typer.Argument(..., help="検索クエリ"),
-    n: Optional[int] = typer.Option(None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"),
+    n: Optional[int] = typer.Option(
+        None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"
+    ),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
@@ -565,7 +567,9 @@ def embed(
         None, "--quiet/--no-quiet", "-q", help="進捗表示を抑制（既定: 設定/環境変数）"
     ),
     batch_size: Optional[int] = typer.Option(
-        None, "--batch-size", help="embedding のバッチサイズ（既定: 設定/環境変数、未指定なら1）"
+        None,
+        "--batch-size",
+        help="embedding のバッチサイズ（既定: 設定/環境変数、未指定なら1）",
     ),
 ) -> None:
     """ベクトルインデックスを構築します。"""
@@ -721,7 +725,9 @@ def embed(
 @app.command()
 def mosearch(
     query: str = typer.Argument(..., help="検索クエリ"),
-    n: Optional[int] = typer.Option(None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"),
+    n: Optional[int] = typer.Option(
+        None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"
+    ),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
@@ -765,7 +771,9 @@ def mosearch(
 @app.command()
 def vsearch(
     query: str = typer.Argument(..., help="検索クエリ"),
-    n: Optional[int] = typer.Option(None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"),
+    n: Optional[int] = typer.Option(
+        None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"
+    ),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
@@ -809,7 +817,9 @@ def vsearch(
 @app.command()
 def query(
     q: str = typer.Argument(..., help="検索クエリ"),
-    n: Optional[int] = typer.Option(None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"),
+    n: Optional[int] = typer.Option(
+        None, "-n", help="結果件数（既定: 設定/環境変数、未指定なら5）"
+    ),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),
@@ -825,13 +835,17 @@ def query(
     xml: bool = typer.Option(False, "--xml", help="XML 出力"),
     files: bool = typer.Option(False, "--files", help="files 形式出力"),
     no_rerank: bool = typer.Option(
-        False, "--no-rerank", help="reranker を無効化（設定で無効化済みの場合は JAQMD_SEARCH_RERANK=true で再度有効化可能）"
+        False,
+        "--no-rerank",
+        help="reranker を無効化（設定で無効化済みの場合は JAQMD_SEARCH_RERANK=true で再度有効化可能）",
     ),
     reranker: Optional[str] = typer.Option(
         None, "--reranker", help="reranker モデル (default|int8)（既定: 設定/環境変数）"
     ),
     no_qe: bool = typer.Option(
-        False, "--no-qe", help="Query Expansion を無効化（設定で無効化済みの場合は JAQMD_SEARCH_QE=true で再度有効化可能）"
+        False,
+        "--no-qe",
+        help="Query Expansion を無効化（設定で無効化済みの場合は JAQMD_SEARCH_QE=true で再度有効化可能）",
     ),
     quiet: Optional[bool] = typer.Option(
         None, "--quiet/--no-quiet", "-q", help="進捗表示を抑制（既定: 設定/環境変数）"

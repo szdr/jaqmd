@@ -3,8 +3,8 @@ from __future__ import annotations
 import sqlite3
 from typing import Optional
 
-from ..tokenize.morph import snippet_terms, to_fts_query
 from ..progress import NULL_REPORTER, ProgressReporter
+from ..tokenize.morph import snippet_terms, to_fts_query
 from .snippet import extract_snippet
 from .trisearch import SearchResult
 

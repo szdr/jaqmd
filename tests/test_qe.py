@@ -7,7 +7,6 @@ import pytest
 from jaqmd.qe import QE_MODEL_ID, ExpansionResult, _extract_json, expand
 from jaqmd.store import get_qe_cache
 
-
 # ---------------------------------------------------------------------------
 # _extract_json: 堅牢な JSON 抽出
 # ---------------------------------------------------------------------------
@@ -70,7 +69,11 @@ class _DummyLlm:
 
 def test_expand_cache_miss_then_hit(conn, monkeypatch):
     canned = json.dumps(
-        {"lex": ["木魚", "もくぎょ"], "vec": "木魚とは何か", "hyde": "木魚は仏具の一種..."},
+        {
+            "lex": ["木魚", "もくぎょ"],
+            "vec": "木魚とは何か",
+            "hyde": "木魚は仏具の一種...",
+        },
         ensure_ascii=False,
     )
     llm = _DummyLlm(canned)

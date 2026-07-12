@@ -1,4 +1,3 @@
-import pytest
 from jaqmd.tokenize.trigram import _trigrams, to_fts_query
 
 

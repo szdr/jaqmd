@@ -29,7 +29,7 @@ def _suppress_native_stderr():
     """llama.cpp のネイティブコードが fd レベルで stderr に吐くログを抑制する。"""
     try:
         stderr_fd = sys.stderr.fileno()
-    except (AttributeError, OSError, ValueError):
+    except AttributeError, OSError, ValueError:
         # 実 fd を持たない（テスト等でキャプチャされた）場合は何もしない
         yield
         return
@@ -98,7 +98,9 @@ def _get_llm(reporter: Optional[ProgressReporter] = None):
                 n_ctx=2048,
                 verbose=False,
             )
-        reporter.note(f"Query Expansion モデルのロード完了 ({time.monotonic() - start:.1f}s)")
+        reporter.note(
+            f"Query Expansion モデルのロード完了 ({time.monotonic() - start:.1f}s)"
+        )
     except Exception as e:
         print(
             f"警告: Query Expansion モデルのロードに失敗しました（{e}）。無効化して続行します。",
@@ -157,7 +159,11 @@ def _run_model(llm, query_text: str) -> Optional[ExpansionResult]:
     lex = obj.get("lex")
     vec = obj.get("vec")
     hyde = obj.get("hyde")
-    if not isinstance(lex, list) or not isinstance(vec, str) or not isinstance(hyde, str):
+    if (
+        not isinstance(lex, list)
+        or not isinstance(vec, str)
+        or not isinstance(hyde, str)
+    ):
         return None
 
     return ExpansionResult(lex=[str(t) for t in lex], vec=vec, hyde=hyde)

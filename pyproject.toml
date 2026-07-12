@@ -44,7 +44,18 @@ markers = [
 ]
 addopts = "-m 'not integration'"
 
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff>=0.15",
 ]

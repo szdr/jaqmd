@@ -2,9 +2,9 @@ import pytest
 
 sudachipy = pytest.importorskip("sudachipy")
 
+from jaqmd.search.mosearch import mosearch
 from jaqmd.store import add_collection, set_meta, upsert_document
 from jaqmd.tokenize.morph import tokenize_text
-from jaqmd.search.mosearch import mosearch
 
 
 def _insert_morph(conn, collection, path, title, body):

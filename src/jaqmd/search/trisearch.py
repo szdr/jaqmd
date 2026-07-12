@@ -4,8 +4,8 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Optional
 
-from ..tokenize.trigram import to_fts_query
 from ..progress import NULL_REPORTER, ProgressReporter
+from ..tokenize.trigram import to_fts_query
 
 
 @dataclass

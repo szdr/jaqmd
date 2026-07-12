@@ -6,8 +6,8 @@ import pytest
 
 sqlite_vec = pytest.importorskip("sqlite_vec")
 
-from jaqmd.store import add_collection, set_meta, upsert_document, vec_available
 from jaqmd.search.vsearch import vsearch
+from jaqmd.store import add_collection, set_meta, upsert_document, vec_available
 
 
 def _insert_vec(conn, collection, path, title, body, vector):
@@ -69,6 +69,7 @@ def _mock_embed_query(monkeypatch, vector):
 
     # vsearch モジュール内で from ..embed import embed_query しているので直接パッチ
     import importlib
+
     import jaqmd.search.vsearch
 
     importlib.import_module("jaqmd.search.vsearch")
@@ -244,7 +245,7 @@ def test_collection_filter(vec_conn, monkeypatch, doc_dir):
 def test_vsearch_with_real_model(tmp_cache):
     """実モデルを使った統合テスト（fastembed + ruri-v3-310m のダウンロードが必要）。"""
     pytest.importorskip("fastembed")
-    from jaqmd.store import connect, add_collection, set_meta, upsert_document
+    from jaqmd.store import add_collection, connect, set_meta, upsert_document
 
     conn = connect()
     if not vec_available(conn):
@@ -252,8 +253,8 @@ def test_vsearch_with_real_model(tmp_cache):
 
     add_collection(conn, "integ", "/tmp/integ_docs")
 
-    from jaqmd.embed import embed_documents, count_tokens, EMBED_MODEL
     from jaqmd.chunk import chunk_document
+    from jaqmd.embed import EMBED_MODEL, count_tokens, embed_documents
 
     body = "東京は日本の首都です。大阪は関西の中心都市です。"
     upsert_document(

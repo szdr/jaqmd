@@ -66,7 +66,9 @@ def embed_documents(
     return model.embed(prefixed, batch_size=batch_size)
 
 
-def embed_query(text: str, *, reporter: Optional[ProgressReporter] = None) -> list[float]:
+def embed_query(
+    text: str, *, reporter: Optional[ProgressReporter] = None
+) -> list[float]:
     """クエリテキストを embedding する（QUERY_PREFIX を自前付与）。"""
     reporter = reporter or NULL_REPORTER
     model = _get_model(reporter)

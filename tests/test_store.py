@@ -1,8 +1,6 @@
 import sqlite3
 
-import pytest
 from jaqmd.store import (
-    _SCHEMA,
     add_collection,
     get_meta,
     list_active_paths,

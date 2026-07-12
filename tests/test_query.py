@@ -4,10 +4,9 @@ import dataclasses
 
 import pytest
 
-from jaqmd.store import add_collection, set_meta, upsert_document
+from jaqmd.search.query import RRF_K, _rrf_fuse, query, query_searches
 from jaqmd.search.trisearch import SearchResult
-from jaqmd.search.query import _rrf_fuse, RRF_K, query, query_searches
-
+from jaqmd.store import add_collection, set_meta, upsert_document
 
 # ---------------------------------------------------------------------------
 # _rrf_fuse ユニットテスト（外部依存なし）

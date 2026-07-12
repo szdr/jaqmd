@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
 from jaqmd.search.snippet import extract_snippet
-
 
 # ---------------------------------------------------------------------------
 # 基本

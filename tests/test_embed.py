@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # fastembed が未インストールの場合はモックを強制使用するため importorskip しない
 # 代わりに fastembed の TextEmbedding 自体をモックする
 

@@ -2,7 +2,7 @@ import pytest
 
 sudachipy = pytest.importorskip("sudachipy")
 
-from jaqmd.tokenize.morph import tokenize_text, to_fts_query
+from jaqmd.tokenize.morph import to_fts_query, tokenize_text
 
 
 def test_tokenize_text_returns_space_separated():

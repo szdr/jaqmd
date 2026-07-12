@@ -79,7 +79,7 @@ def _as_int(value: Any, env: str, default: int) -> int:
         return default
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         print(
             f"警告: {env} の値が不正です（{value!r}）。既定値 {default} を使用します。",
             file=sys.stderr,
@@ -92,7 +92,7 @@ def _as_float(value: Any, env: str, default: Optional[float]) -> Optional[float]
         return default
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         print(
             f"警告: {env} の値が不正です（{value!r}）。既定値 {default} を使用します。",
             file=sys.stderr,
@@ -139,7 +139,9 @@ def _build() -> Settings:
         return _raw(table, section, key, env)
 
     return Settings(
-        search_n=_as_int(g("search", "n", "JAQMD_SEARCH_N"), "JAQMD_SEARCH_N", d.search_n),
+        search_n=_as_int(
+            g("search", "n", "JAQMD_SEARCH_N"), "JAQMD_SEARCH_N", d.search_n
+        ),
         search_format=_as_str(
             g("search", "format", "JAQMD_SEARCH_FORMAT"), d.search_format
         ),
@@ -171,9 +173,7 @@ def _build() -> Settings:
         quiet=_as_bool(g("general", "quiet", "JAQMD_QUIET"), "JAQMD_QUIET", d.quiet),
         db_path=_raw(table, "paths", "db", "JAQMD_DB_PATH"),
         models_dir=_raw(table, "paths", "models", "JAQMD_MODELS_DIR"),
-        embed_model=_as_str(
-            g("models", "embed", "JAQMD_MODELS_EMBED"), d.embed_model
-        ),
+        embed_model=_as_str(g("models", "embed", "JAQMD_MODELS_EMBED"), d.embed_model),
         reranker_model=_as_str(
             g("models", "reranker", "JAQMD_MODELS_RERANKER"), d.reranker_model
         ),
