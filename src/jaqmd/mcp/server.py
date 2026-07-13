@@ -220,7 +220,13 @@ def build_server():
         finally:
             conn.close()
 
-    @mcp.tool(description="パス・docid（`#abc123` 形式）でドキュメントを1件取得する。")
+    @mcp.tool(
+        description=(
+            "パス・docid でドキュメントを1件取得する。"
+            "docid は query/multi_get のレスポンスに含まれる `docid` の値をそのまま指定する"
+            "（例: `abc123`。先頭に `#` は付けない）。"
+        )
+    )
     def get(file: str) -> dict:
         conn = connect()
         try:

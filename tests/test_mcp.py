@@ -125,6 +125,17 @@ def test_run_get_by_docid(trigram_conn):
     assert "形態素解析" in result["body"]
 
 
+def test_run_get_by_docid_with_hash_prefix(trigram_conn):
+    """誤って `#` を付けた docid でも救済して取得できる。"""
+    from jaqmd.mcp.server import run_get
+
+    row = trigram_conn.execute(
+        "SELECT docid FROM documents WHERE path = 'a.md'"
+    ).fetchone()
+    result = run_get(trigram_conn, f"#{row['docid']}")
+    assert result["path"] == "a.md"
+
+
 def test_run_get_by_path(trigram_conn):
     from jaqmd.mcp.server import run_get
 

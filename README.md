@@ -252,7 +252,7 @@ Unavailable : vsearch, query(full)
 | ツール | 内容 |
 |--------|------|
 | `query` | typed searches（`{type: lex\|vec\|hyde, text}` の配列、1〜10件）による RRF 融合 + リランク検索。先頭の search は融合時に2倍の重みを持つ |
-| `get` | パスまたは docid（`#abc123`）でドキュメントを1件取得 |
+| `get` | パスまたは docid（`abc123`。先頭に `#` は付けない）でドキュメントを1件取得 |
 | `multi_get` | glob パターンまたはカンマ区切りで複数ドキュメントを取得 |
 | `status` | インデックスの構築状態・コレクション一覧を取得 |
 

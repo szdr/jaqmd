@@ -84,7 +84,7 @@ CREATE TABLE documents (
     collection   TEXT NOT NULL,
     path         TEXT NOT NULL,        -- コレクション相対パス
     hash         TEXT NOT NULL REFERENCES content(hash),
-    docid        TEXT UNIQUE NOT NULL, -- 6文字ハッシュ（#abc123）
+    docid        TEXT UNIQUE NOT NULL, -- 6文字ハッシュ（例: abc123。"#" は付かない）
     title        TEXT,
     mtime        INTEGER,
     active       INTEGER DEFAULT 1,    -- 論理削除フラグ

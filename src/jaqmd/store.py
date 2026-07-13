@@ -193,7 +193,12 @@ def list_active_paths(conn: sqlite3.Connection, collection: str) -> set[str]:
 
 
 def get_document(conn: sqlite3.Connection, ref: str) -> Optional[sqlite3.Row]:
-    """docid またはパスでドキュメントを1件取得する。"""
+    """docid またはパスでドキュメントを1件取得する。
+
+    docid は先頭に "#" を付けずに指定する仕様だが、誤って付与された場合も
+    救済できるよう剥がしてから照合する。
+    """
+    ref = ref.removeprefix("#")
     row = conn.execute(
         """SELECT d.id, d.docid, d.collection, d.path, d.title, c.body
            FROM documents d JOIN content c ON d.hash = c.hash
