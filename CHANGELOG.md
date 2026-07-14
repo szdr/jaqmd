@@ -1,3 +1,13 @@
+## [0.1.3] - 2026-07-14
+
+### 🚀 Features
+
+- --version オプションを追加
+- --help を -h でも呼べるようにする
+
+### ⚙️ Miscellaneous Tasks
+
+- PLANS.md を削除
 ## [0.1.2] - 2026-07-14
 
 ### ⚙️ Miscellaneous Tasks
