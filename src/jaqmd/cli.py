@@ -37,8 +37,14 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-app = typer.Typer(help="jaqmd — 日本語ドキュメント検索エンジン", no_args_is_help=True)
-collection_app = typer.Typer(no_args_is_help=True)
+CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
+
+app = typer.Typer(
+    help="jaqmd — 日本語ドキュメント検索エンジン",
+    no_args_is_help=True,
+    context_settings=CONTEXT_SETTINGS,
+)
+collection_app = typer.Typer(no_args_is_help=True, context_settings=CONTEXT_SETTINGS)
 app.add_typer(collection_app, name="collection", help="コレクションの管理")
 
 
