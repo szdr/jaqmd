@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "jaqmd"
 version = "0.1.1"
 description = "日本語ドキュメントに特化したローカル検索エンジン"
+readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "typer>=0.12",
