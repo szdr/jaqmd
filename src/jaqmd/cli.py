@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Optional
 
@@ -29,9 +30,29 @@ from .store import (
     upsert_document,
 )
 
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"jaqmd {_pkg_version('jaqmd')}")
+        raise typer.Exit()
+
+
 app = typer.Typer(help="jaqmd — 日本語ドキュメント検索エンジン", no_args_is_help=True)
 collection_app = typer.Typer(no_args_is_help=True)
 app.add_typer(collection_app, name="collection", help="コレクションの管理")
+
+
+@app.callback()
+def _main_callback(
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="バージョンを表示して終了します。",
+    ),
+) -> None:
+    pass
 
 
 def main() -> None:
