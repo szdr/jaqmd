@@ -1,3 +1,8 @@
+## [0.1.2] - 2026-07-14
+
+### ⚙️ Miscellaneous Tasks
+
+- Pyproject に readme を指定
 ## [0.1.1] - 2026-07-13
 
 ### 🚀 Features
