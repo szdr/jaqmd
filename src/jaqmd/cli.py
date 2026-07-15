@@ -122,7 +122,6 @@ def collection_remove(
 
 @app.command()
 def update(
-    pull: bool = typer.Option(False, "--pull", help="（予約）"),
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="コレクション絞り込み"
     ),

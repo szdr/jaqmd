@@ -8,7 +8,6 @@
 
 - **日本語特化**: trigram検索・形態素解析検索・ベクトル検索の3つを日本語向けに最適化
 - **完全ローカル**: SQLite + sqlite-vec + FTS5 で完結。外部DBやサーバー不要
-- **薄い依存**: PyTorch非依存。ONNX Runtime ベースの軽量構成
 - **段階的なインデックス構築**: 必要な検索機能だけを段階的に有効化できる
 
 ## アーキテクチャ概要
@@ -22,7 +21,7 @@
   jaqmd search    trigram BM25検索
   jaqmd mosearch  形態素解析 BM25検索
   jaqmd vsearch   ベクトル意味検索（ruri-v3）
-  jaqmd query     上記を組み合わせ + リランク（推奨）
+  jaqmd query     上記を組み合わせ + リランク
 ```
 
 ## モデル構成
@@ -90,7 +89,7 @@ jaqmd query "日本語の検索エンジンを作りたい"
 | コマンド | 処理内容 | 事前要件 |
 |----------|----------|----------|
 | `jaqmd collection add <path> --name <name>` | コレクションを追加 | - |
-| `jaqmd update [--pull]` | ファイルをスキャンし trigram FTS を構築 | - |
+| `jaqmd update` | ファイルをスキャンし trigram FTS を構築 | - |
 | `jaqmd morph` | 形態素解析して形態素 FTS を構築 | SudachiPy |
 | `jaqmd embed [-f]` | ruri-v3 でチャンクをベクトル化 | fastembed |
 
@@ -128,7 +127,7 @@ jaqmd query "日本語の検索エンジンを作りたい"
 --md              Markdown 形式で出力
 --xml             XML 形式で出力
 --files           docid,score,filepath,context 形式で出力
---no-rerank       （query のみ）ruri-reranker を無効化し RRF 順のまま返す
+--no-rerank       （query のみ）リランク を無効化し RRF 順のまま返す
 --no-qe           （query のみ）Query Expansion を無効化し raw クエリのまま検索する
 ```
 
@@ -247,7 +246,7 @@ Unavailable : vsearch, query(full)
 
 ## MCP サーバー
 
-[tobi/qmd](https://github.com/tobi/qmd) の MCP サーバーに準拠したツールセットを stdio トランスポートで公開します（`jaqmd[mcp]` が必要）。
+以下のツールセットを stdio トランスポートで公開します（`jaqmd[mcp]` が必要）。
 
 | ツール | 内容 |
 |--------|------|
