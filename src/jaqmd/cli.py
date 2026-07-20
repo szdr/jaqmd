@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
@@ -256,6 +257,7 @@ def _run_search(
         collection=collection,
         min_score=min_score,
         all_results=all_results,
+        snippet_chars=settings.search_snippet_chars,
         reporter=reporter,
         **kwargs,
     )
@@ -272,7 +274,10 @@ def _run_search(
         # 出力形式フラグが未指定の場合のみ設定値（既定 "plain"）を採用する
         fmt = settings.search_format
 
-    typer.echo(format_results(results, fmt=fmt, full=full))
+    use_color = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+    typer.echo(
+        format_results(results, fmt=fmt, full=full, query=query, color=use_color)
+    )
 
 
 # ---------------------------------------------------------------------------

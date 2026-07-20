@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Optional
 
+from ..config import settings
 from ..progress import NULL_REPORTER, ProgressReporter
 from ..tokenize.morph import snippet_terms, to_fts_query
 from .snippet import extract_snippet
@@ -17,10 +18,13 @@ def mosearch(
     collection: Optional[str] = None,
     min_score: Optional[float] = None,
     all_results: bool = False,
+    snippet_chars: Optional[int] = None,
     reporter: Optional[ProgressReporter] = None,
 ) -> list[SearchResult]:
     """形態素 BM25 検索を実行する。スニペットは原文ベースで生成する。"""
     reporter = reporter or NULL_REPORTER
+    if snippet_chars is None:
+        snippet_chars = settings.search_snippet_chars
     fts_query = to_fts_query(query)
     if not fts_query:
         return []
@@ -67,7 +71,7 @@ def mosearch(
                 score=score,
                 filepath=row["filepath"],
                 title=row["title"] or "",
-                snippet=extract_snippet(body, terms, max_chars=160),
+                snippet=extract_snippet(body, terms, max_chars=snippet_chars),
                 body=body,
             )
         )

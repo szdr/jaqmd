@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Optional
 
+from ..config import settings
 from ..progress import NULL_REPORTER, ProgressReporter
 from .snippet import extract_snippet
 from .trisearch import SearchResult
@@ -16,6 +17,7 @@ def vsearch(
     collection: Optional[str] = None,
     min_score: Optional[float] = None,
     all_results: bool = False,
+    snippet_chars: Optional[int] = None,
     reporter: Optional[ProgressReporter] = None,
 ) -> list[SearchResult]:
     """ベクトル KNN 検索を実行する。ドキュメント単位（最良チャンク）で結果を返す。
@@ -23,6 +25,8 @@ def vsearch(
     score は cosine 類似度近似値（高いほど良い）。
     """
     reporter = reporter or NULL_REPORTER
+    if snippet_chars is None:
+        snippet_chars = settings.search_snippet_chars
     if not query.strip():
         return []
 
@@ -111,7 +115,9 @@ def vsearch(
                 score=score,
                 filepath=row["filepath"],
                 title=row["title"] or "",
-                snippet=extract_snippet(row["chunk_text"] or "", query.split()),
+                snippet=extract_snippet(
+                    row["chunk_text"] or "", query.split(), max_chars=snippet_chars
+                ),
                 body=row["body"] or "",
             )
         )

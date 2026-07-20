@@ -123,6 +123,33 @@ def test_min_score_filter(indexed_conn):
     assert filtered == []
 
 
+def test_snippet_length_controlled_by_snippet_chars(conn, doc_dir):
+    """snippet_chars で snippet の長さを制御できる（大きいほど長くなる）。"""
+    add_collection(conn, "test", str(doc_dir))
+    # snippet_chars より十分長い本文を用意する
+    body = "".join(f"検索エンジンの話題その{i:03d}を説明します。" for i in range(80))
+    upsert_document(
+        conn,
+        collection="test",
+        path="long.md",
+        body=body,
+        title="長い文書",
+        mtime=1000,
+    )
+    conn.commit()
+    set_meta(conn, "trigram_indexed", "1")
+    conn.commit()
+
+    short = trisearch(conn, "検索エンジン", snippet_chars=50)[0].snippet
+    long = trisearch(conn, "検索エンジン", snippet_chars=400)[0].snippet
+
+    # 本文より短く切り出され、かつ大きい snippet_chars ほど長い
+    assert len(short) < len(body)
+    assert len(long) > len(short)
+    # 省略記号を除いた本文部分が snippet_chars を大きく超えない
+    assert len(short.strip(".")) <= 50
+
+
 def test_result_fields(indexed_conn):
     """SearchResult の各フィールドが正しく設定されている。"""
     results = trisearch(indexed_conn, "形態素解析")

@@ -114,6 +114,7 @@ class Settings:
     search_reranker: str = "default"
     search_rerank: bool = True
     search_qe: bool = True
+    search_snippet_chars: int = 300
     # [index]
     index_glob: str = "**/*.md"
     index_batch_size: int = 1
@@ -163,6 +164,11 @@ def _build() -> Settings:
         ),
         search_qe=_as_bool(
             g("search", "qe", "JAQMD_SEARCH_QE"), "JAQMD_SEARCH_QE", d.search_qe
+        ),
+        search_snippet_chars=_as_int(
+            g("search", "snippet_chars", "JAQMD_SEARCH_SNIPPET_CHARS"),
+            "JAQMD_SEARCH_SNIPPET_CHARS",
+            d.search_snippet_chars,
         ),
         index_glob=_as_str(g("index", "glob", "JAQMD_INDEX_GLOB"), d.index_glob),
         index_batch_size=_as_int(

@@ -128,6 +128,7 @@ def query(
     rerank_enabled: bool = True,
     rerank_model: str = DEFAULT_RERANKER,
     qe_enabled: bool = True,
+    snippet_chars: Optional[int] = None,
     reporter: Optional[ProgressReporter] = None,
     on_expansion: Optional[Callable[[Optional[ExpansionResult]], None]] = None,
 ) -> list[SearchResult]:
@@ -174,6 +175,7 @@ def query(
         n=candidate_n,
         collection=collection,
         all_results=True,
+        snippet_chars=snippet_chars,
         reporter=reporter,
     )
     result_lists.append(tri_results)
@@ -188,6 +190,7 @@ def query(
             n=candidate_n,
             collection=collection,
             all_results=True,
+            snippet_chars=snippet_chars,
             reporter=reporter,
         )
         result_lists.append(mo_results)
@@ -202,6 +205,7 @@ def query(
             n=candidate_n,
             collection=collection,
             all_results=True,
+            snippet_chars=snippet_chars,
             reporter=reporter,
         )
         result_lists.append(vs_results)
@@ -214,6 +218,7 @@ def query(
                 n=candidate_n,
                 collection=collection,
                 all_results=True,
+                snippet_chars=snippet_chars,
                 reporter=reporter,
             )
             result_lists.append(hyde_results)
@@ -248,6 +253,7 @@ def query_searches(
     candidate_limit: int = 40,
     rerank_enabled: bool = True,
     rerank_model: str = DEFAULT_RERANKER,
+    snippet_chars: Optional[int] = None,
     reporter: Optional[ProgressReporter] = None,
 ) -> list[SearchResult]:
     """tobi/qmd 風の typed searches 配列によるハイブリッド検索（MCP query ツール用）。
@@ -286,14 +292,26 @@ def query_searches(
         weight = 2.0 if i == 0 else 1.0
 
         if stype == "lex":
-            tri_results = trisearch(conn, text, all_results=True, reporter=reporter)
+            tri_results = trisearch(
+                conn,
+                text,
+                all_results=True,
+                snippet_chars=snippet_chars,
+                reporter=reporter,
+            )
             result_lists.append(tri_results)
             weights.append(weight)
 
             if morph_available:
                 from .mosearch import mosearch
 
-                mo_results = mosearch(conn, text, all_results=True, reporter=reporter)
+                mo_results = mosearch(
+                    conn,
+                    text,
+                    all_results=True,
+                    snippet_chars=snippet_chars,
+                    reporter=reporter,
+                )
                 result_lists.append(mo_results)
                 weights.append(weight)
 
@@ -301,7 +319,13 @@ def query_searches(
             if vec_indexed:
                 from .vsearch import vsearch
 
-                vs_results = vsearch(conn, text, all_results=True, reporter=reporter)
+                vs_results = vsearch(
+                    conn,
+                    text,
+                    all_results=True,
+                    snippet_chars=snippet_chars,
+                    reporter=reporter,
+                )
                 result_lists.append(vs_results)
                 weights.append(weight)
 
