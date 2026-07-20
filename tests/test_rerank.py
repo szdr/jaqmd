@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from jaqmd.rerank import _doc_text, rerank
+from jaqmd.rerank import _doc_text, _sigmoid, rerank, rerank_scores
 from jaqmd.search.trisearch import SearchResult
 
 
@@ -133,6 +133,67 @@ def test_rerank_respects_n_after_reorder(monkeypatch):
     out = rerank("q", results, n=1)
     assert len(out) == 1
     assert out[0].docid == "b"
+
+
+# ---------------------------------------------------------------------------
+# _sigmoid
+# ---------------------------------------------------------------------------
+
+
+def test_sigmoid_range_and_monotonic():
+    import math
+
+    assert _sigmoid(0.0) == pytest.approx(0.5)
+    # 単調増加し [0, 1] に収まる（大きな正/負でも例外を出さない）
+    assert _sigmoid(-30.0) < _sigmoid(0.0) < _sigmoid(30.0)
+    assert 0.0 <= _sigmoid(-1000.0) < _sigmoid(1000.0) <= 1.0
+    assert _sigmoid(2.0) == pytest.approx(1.0 / (1.0 + math.exp(-2.0)))
+
+
+# ---------------------------------------------------------------------------
+# rerank_scores: 非破壊・sigmoid 正規化・degrade（None）経路
+# ---------------------------------------------------------------------------
+
+
+def test_rerank_scores_disabled_returns_none():
+    results = [_make_result("a"), _make_result("b")]
+    assert rerank_scores("q", results, enabled=False) is None
+
+
+def test_rerank_scores_empty_returns_none():
+    assert rerank_scores("q", []) is None
+
+
+def test_rerank_scores_no_encoder_returns_none(monkeypatch):
+    monkeypatch.setattr(
+        "jaqmd.rerank._get_encoder", lambda model=None, reporter=None: None
+    )
+    results = [_make_result("a"), _make_result("b")]
+    assert rerank_scores("q", results) is None
+
+
+def test_rerank_scores_preserves_order_and_sigmoid(monkeypatch):
+    import math
+
+    results = [
+        _make_result("a", body="a本文"),
+        _make_result("b", body="b本文"),
+        _make_result("c", body="c本文"),
+    ]
+    # 生ロジット（ソートせず入力順のまま sigmoid 正規化して返す）
+    encoder = _DummyEncoder({"a本文": 2.0, "b本文": -1.0, "c本文": 0.0})
+    monkeypatch.setattr(
+        "jaqmd.rerank._get_encoder", lambda model=None, reporter=None: encoder
+    )
+
+    scores = rerank_scores("q", results)
+    assert scores is not None
+    # 入力順を保持（ソートしない）
+    assert scores[0] == pytest.approx(1.0 / (1.0 + math.exp(-2.0)))
+    assert scores[1] == pytest.approx(1.0 / (1.0 + math.exp(1.0)))
+    assert scores[2] == pytest.approx(0.5)
+    # 全件 (0, 1) に収まる
+    assert all(0.0 < s < 1.0 for s in scores)
 
 
 # ---------------------------------------------------------------------------

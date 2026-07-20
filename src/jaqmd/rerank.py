@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import math
 import os
 import sys
 from typing import TYPE_CHECKING, Optional
@@ -101,6 +102,56 @@ def _get_encoder(
 def _doc_text(r: "SearchResult") -> str:
     """rerank に渡す文書テキスト。body があればそれ、なければ snippet。"""
     return r.body if r.body else r.snippet
+
+
+def _sigmoid(x: float) -> float:
+    """生ロジットを (0, 1) に写像する。オーバーフローを避ける安定版。"""
+    if x >= 0:
+        return 1.0 / (1.0 + math.exp(-x))
+    ex = math.exp(x)
+    return ex / (1.0 + ex)
+
+
+def rerank_scores(
+    query: str,
+    results: list["SearchResult"],
+    *,
+    enabled: bool = True,
+    model: str = DEFAULT_RERANKER,
+    reporter: Optional[ProgressReporter] = None,
+) -> Optional[list[float]]:
+    """results と同じ長さ・同じ順序の rerank スコア列（sigmoid 正規化済み）を返す。
+
+    `rerank()` と異なりソートも score 差し替えもしない純粋関数。位置依存ブレンド
+    （query._blend_scores）で rerankScore として使うために、融合順位を保ったまま
+    スコアだけを取り出す用途。
+
+    reranker は生ロジットを返すため、`1/rrfRank`（0-1）と加重合成できるよう
+    sigmoid で (0, 1) に写像する。
+
+    Args:
+        query: 検索クエリ。
+        results: rerank 対象の SearchResult リスト（RRF 融合順）。
+        enabled: False なら reranker を使わず None を返す。
+        model: 使用する reranker モデルキー（RERANKER_MODELS 参照。既定 "default"）。
+        reporter: 進捗表示用の ProgressReporter（None なら無効）。
+
+    Returns:
+        results と同順の sigmoid 正規化済みスコア列。
+        enabled=False / fastembed 未導入 / モデルロード失敗 / 空入力 の場合は None
+        （呼び出し側で rerankScore 抜きの degrade ブレンドに使う）。
+    """
+    reporter = reporter or NULL_REPORTER
+    if not results or not enabled:
+        return None
+
+    encoder = _get_encoder(model, reporter)
+    if encoder is None:
+        return None
+
+    with reporter.step(f"リランク ({len(results)} 件)"):
+        raw = list(encoder.rerank(query, [_doc_text(r) for r in results]))
+    return [_sigmoid(float(s)) for s in raw]
 
 
 def rerank(

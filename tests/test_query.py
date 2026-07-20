@@ -4,7 +4,14 @@ import dataclasses
 
 import pytest
 
-from jaqmd.search.query import RRF_K, _rrf_fuse, query, query_searches
+from jaqmd.search.query import (
+    RRF_K,
+    _blend_scores,
+    _finalize,
+    _rrf_fuse,
+    query,
+    query_searches,
+)
 from jaqmd.search.trisearch import SearchResult
 from jaqmd.store import add_collection, set_meta, upsert_document
 
@@ -27,7 +34,7 @@ def _make_result(docid: str, score: float = 1.0) -> SearchResult:
 def test_rrf_single_list():
     """単一リストの場合、RRF スコアが付与されスコア降順になる。"""
     results = [_make_result("a"), _make_result("b"), _make_result("c")]
-    fused = _rrf_fuse([results])
+    fused = _rrf_fuse([results], top_rank_bonus=False)
     assert [r.docid for r in fused] == ["a", "b", "c"]
     # rank=0: 1/(60+1), rank=1: 1/(60+2), rank=2: 1/(60+3)
     assert fused[0].score == pytest.approx(1.0 / (RRF_K + 1))
@@ -39,7 +46,7 @@ def test_rrf_fuse_two_lists_overlap():
     """2リストで重複ありの場合、重複 docid のスコアが加算される。"""
     list_a = [_make_result("x"), _make_result("y")]
     list_b = [_make_result("x"), _make_result("z")]
-    fused = _rrf_fuse([list_a, list_b])
+    fused = _rrf_fuse([list_a, list_b], top_rank_bonus=False)
     docids = [r.docid for r in fused]
     # "x" は両リストの rank=0 なので最高スコア
     assert docids[0] == "x"
@@ -52,7 +59,7 @@ def test_rrf_fuse_preserves_representative():
     rep2 = dataclasses.replace(rep, score=99.0, snippet="other")
     list_a = [rep]
     list_b = [rep2]
-    fused = _rrf_fuse([list_a, list_b])
+    fused = _rrf_fuse([list_a, list_b], top_rank_bonus=False)
     assert len(fused) == 1
     # score は RRF 計算値（原スコアは使わない）
     expected_score = 2.0 / (RRF_K + 1)
@@ -65,7 +72,7 @@ def test_rrf_fuse_no_overlap():
     """重複なし: 各 docid の RRF スコアが独立して計算される。"""
     list_a = [_make_result("a")]
     list_b = [_make_result("b")]
-    fused = _rrf_fuse([list_a, list_b])
+    fused = _rrf_fuse([list_a, list_b], top_rank_bonus=False)
     assert len(fused) == 2
     # a, b ともに同じ RRF スコア → どちらが先でもよい
     scores = {r.docid: r.score for r in fused}
@@ -95,7 +102,7 @@ def test_rrf_fuse_weights_boost_first_list():
     """先頭リストに weight=2.0 を与えると、そのリスト由来のスコア寄与が2倍になる。"""
     list_a = [_make_result("a")]  # weight 2.0
     list_b = [_make_result("b")]  # weight 1.0
-    fused = _rrf_fuse([list_a, list_b], weights=[2.0, 1.0])
+    fused = _rrf_fuse([list_a, list_b], weights=[2.0, 1.0], top_rank_bonus=False)
     scores = {r.docid: r.score for r in fused}
     assert scores["a"] == pytest.approx(2.0 / (RRF_K + 1))
     assert scores["b"] == pytest.approx(1.0 / (RRF_K + 1))
@@ -110,6 +117,132 @@ def test_rrf_fuse_score_ordering():
     fused = _rrf_fuse([list_a, list_b])
     scores = [r.score for r in fused]
     assert scores == sorted(scores, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# _rrf_fuse: top-rank ボーナス（tobi/qmd 準拠）
+# ---------------------------------------------------------------------------
+
+
+def test_rrf_top_rank_bonus_rank0():
+    """いずれかのリストで rank0 に現れた doc に +0.05 が加算される。"""
+    results = [_make_result("a"), _make_result("b")]
+    fused = _rrf_fuse([results], top_rank_bonus=True)
+    scores = {r.docid: r.score for r in fused}
+    # a: rank0 → base 1/(60+1) + 0.05
+    assert scores["a"] == pytest.approx(1.0 / (RRF_K + 1) + 0.05)
+    # b: rank1 → base 1/(60+2) + 0.02（rank<=2）
+    assert scores["b"] == pytest.approx(1.0 / (RRF_K + 2) + 0.02)
+
+
+def test_rrf_top_rank_bonus_rank_gt_2_no_bonus():
+    """rank>=3 の doc にはボーナスが付かない。"""
+    results = [_make_result(d) for d in ["a", "b", "c", "d"]]
+    fused = _rrf_fuse([results], top_rank_bonus=True)
+    scores = {r.docid: r.score for r in fused}
+    # d: rank3 → ボーナスなし
+    assert scores["d"] == pytest.approx(1.0 / (RRF_K + 4))
+
+
+def test_rrf_top_rank_bonus_uses_min_rank_across_lists():
+    """topRank は全リスト中の最小 rank。別リストで rank0 に現れれば +0.05。"""
+    list_a = [_make_result("x"), _make_result("y")]  # y は rank1
+    list_b = [_make_result("y"), _make_result("z")]  # y は rank0
+    fused = _rrf_fuse([list_a, list_b], top_rank_bonus=True)
+    scores = {r.docid: r.score for r in fused}
+    base_y = 1.0 / (RRF_K + 2) + 1.0 / (RRF_K + 1)
+    assert scores["y"] == pytest.approx(base_y + 0.05)
+
+
+def test_rrf_top_rank_bonus_default_on():
+    """top_rank_bonus のデフォルトは True。"""
+    results = [_make_result("a")]
+    fused_default = _rrf_fuse([results])
+    fused_on = _rrf_fuse([results], top_rank_bonus=True)
+    assert fused_default[0].score == pytest.approx(fused_on[0].score)
+    assert fused_default[0].score == pytest.approx(1.0 / (RRF_K + 1) + 0.05)
+
+
+# ---------------------------------------------------------------------------
+# _blend_scores: 位置依存ブレンド（tobi/qmd 準拠）
+# ---------------------------------------------------------------------------
+
+
+def test_blend_scores_position_weights():
+    """rrfRank のバケット（<=3:0.75 / <=10:0.60 / それ以外:0.40）で重みが切り替わる。"""
+    # rerankScore は全件 1.0（差が rrfWeight*rrf_score 部分のみに出る）
+    candidates = [_make_result(f"d{i}") for i in range(12)]
+    rr = [1.0] * 12
+    blended = _blend_scores(candidates, rr)
+    by_doc = {r.docid: r.score for r in blended}
+
+    def expected(rank1: int) -> float:
+        rrf = 1.0 / rank1
+        w = 0.75 if rank1 <= 3 else 0.60 if rank1 <= 10 else 0.40
+        return w * rrf + (1.0 - w) * 1.0
+
+    assert by_doc["d0"] == pytest.approx(expected(1))  # rrfRank1, w=0.75
+    assert by_doc["d3"] == pytest.approx(expected(4))  # rrfRank4, w=0.60
+    assert by_doc["d10"] == pytest.approx(expected(11))  # rrfRank11, w=0.40
+
+
+def test_blend_scores_degrade_uses_rrf_only():
+    """rerank_scores_list=None（degrade）では blended = 1/rrfRank になる。"""
+    candidates = [_make_result("a"), _make_result("b"), _make_result("c")]
+    blended = _blend_scores(candidates, None)
+    # 順序は 1/rrfRank 降順（＝入力順のまま）
+    assert [r.docid for r in blended] == ["a", "b", "c"]
+    assert blended[0].score == pytest.approx(1.0 / 1)
+    assert blended[1].score == pytest.approx(1.0 / 2)
+    assert blended[2].score == pytest.approx(1.0 / 3)
+
+
+def test_blend_scores_sorted_descending():
+    """blended スコア降順にソートされる。"""
+    candidates = [_make_result("a"), _make_result("b"), _make_result("c")]
+    # 下位 doc に高い rerankScore を与えても、位置依存重みで上位保護が効く
+    blended = _blend_scores(candidates, [0.0, 0.0, 1.0])
+    scores = [r.score for r in blended]
+    assert scores == sorted(scores, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# _finalize: 候補プール切り出し + min_score 足切り
+# ---------------------------------------------------------------------------
+
+
+def test_finalize_candidate_limit_slices_pool():
+    """candidate_limit で融合プールが切り出され、それを超える候補は落ちる。"""
+    fused = [_make_result(f"d{i}", score=1.0 / (i + 1)) for i in range(10)]
+    out = _finalize(
+        fused,
+        query_for_rerank="q",
+        rerank_enabled=False,  # rerank_scores=None → blended=1/rrfRank
+        rerank_model="default",
+        all_results=False,
+        n=100,
+        min_score=None,
+        candidate_limit=3,
+    )
+    assert [r.docid for r in out] == ["d0", "d1", "d2"]
+    assert out[0].score == pytest.approx(1.0)
+
+
+def test_finalize_min_score_filters_blended():
+    """min_score はブレンド後スコアに対する足切りとして機能する。"""
+    fused = [_make_result(f"d{i}") for i in range(5)]
+    out = _finalize(
+        fused,
+        query_for_rerank="q",
+        rerank_enabled=False,  # blended=1/rrfRank → d0=1.0, d1=0.5, d2≈0.33...
+        rerank_model="default",
+        all_results=True,
+        n=100,
+        min_score=0.5,
+        candidate_limit=None,
+    )
+    # 1/rrfRank >= 0.5 なのは rank1(1.0), rank2(0.5) のみ
+    assert [r.docid for r in out] == ["d0", "d1"]
 
 
 # ---------------------------------------------------------------------------

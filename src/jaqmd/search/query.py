@@ -8,7 +8,7 @@ from ..config import settings
 from ..progress import NULL_REPORTER, ProgressReporter
 from ..qe import ExpansionResult
 from ..qe import expand as qe_expand
-from ..rerank import DEFAULT_RERANKER, RERANK_TOP_K, rerank
+from ..rerank import DEFAULT_RERANKER, rerank_scores
 from ..store import get_meta
 from .trisearch import SearchResult, trisearch
 
@@ -16,33 +16,54 @@ from .trisearch import SearchResult, trisearch
 RRF_K = settings.rrf_k
 
 
-def _minmax_scale(results: list[SearchResult]) -> list[SearchResult]:
-    """RRF スコアを min-max スケーリングで 0-1 に正規化する。
+def _blend_scores(
+    candidates: list[SearchResult],
+    rerank_scores_list: Optional[list[float]],
+) -> list[SearchResult]:
+    """tobi/qmd 風の位置依存ブレンドで最終スコアを算出し、降順ソートして返す。
 
-    融合済み全候補の min/max を使って正規化するため、
-    最も関連度が高い結果が 1.0、最も低い結果が 0.0 になる。
+    融合順位 rrfRank（candidates 内の 1 始まり順位）の逆数 1/rrfRank と、
+    rerankScore（sigmoid 正規化済み）を位置依存の重みで加重合成する。
+    上位ほど RRF 順位を重視し（reranker の乱れから保護）、下位ほど rerank を重視する。
+
+        rrf_score  = 1 / rrfRank
+        rrf_weight = 0.75 (rrfRank<=3) / 0.60 (<=10) / 0.40 (それ以外)
+        blended    = rrf_weight * rrf_score + (1 - rrf_weight) * rerank_score
 
     Args:
-        results: RRF 融合済みの SearchResult リスト（スコア降順）。
+        candidates: RRF 融合順（スコア降順）の SearchResult リスト。
+        rerank_scores_list: candidates と同順の rerankScore 列。None なら reranker
+            無効/失敗の degrade とみなし rerank_score = rrf_score を使う
+            （結果として blended = 1/rrfRank となり RRF 融合順位がそのまま残る）。
 
     Returns:
-        score を 0-1 に正規化した SearchResult リスト（並び順は維持）。
+        blended スコアを score に持つ SearchResult リスト（スコア降順）。
     """
-    if not results:
-        return results
-    scores = [r.score for r in results]
-    lo, hi = min(scores), max(scores)
-    if hi == lo:
-        # 全件同スコア（1件のみ含む）はゼロ除算を避けて全件 1.0
-        return [dataclasses.replace(r, score=1.0) for r in results]
-    span = hi - lo
-    return [dataclasses.replace(r, score=(r.score - lo) / span) for r in results]
+    blended: list[SearchResult] = []
+    for i, r in enumerate(candidates):
+        rrf_rank = i + 1
+        rrf_score = 1.0 / rrf_rank
+        if rrf_rank <= 3:
+            rrf_weight = 0.75
+        elif rrf_rank <= 10:
+            rrf_weight = 0.60
+        else:
+            rrf_weight = 0.40
+        rerank_score = (
+            rerank_scores_list[i] if rerank_scores_list is not None else rrf_score
+        )
+        score = rrf_weight * rrf_score + (1.0 - rrf_weight) * rerank_score
+        blended.append(dataclasses.replace(r, score=score))
+
+    blended.sort(key=lambda r: r.score, reverse=True)
+    return blended
 
 
 def _rrf_fuse(
     result_lists: list[list[SearchResult]],
     k: int = RRF_K,
     weights: Optional[list[float]] = None,
+    top_rank_bonus: bool = True,
 ) -> list[SearchResult]:
     """Reciprocal Rank Fusion で複数の検索結果リストを融合する。
 
@@ -50,11 +71,19 @@ def _rrf_fuse(
     代表 SearchResult は docid 初出時のもの（リスト順）を保持し、
     RRF スコアを score フィールドに差し替えて返す。
 
+    さらに tobi/qmd に倣い top-rank ボーナスを加える: いずれかのリストで
+    最上位（rank 0）に現れた doc に +0.05、上位（rank <= 2）に +0.02。
+    最終スコアは後段の位置依存ブレンド（_blend_scores）で 1/rrfRank ベースに
+    差し替わるため、このボーナスは融合順位（＝ rrfRank と候補プールの切り出し）
+    にのみ効き、最終スコアの値そのものには影響しない。
+
     Args:
         result_lists: 融合する SearchResult リストのリスト（trigram→morph→vec の順を推奨）。
         k: RRF パラメータ（デフォルト 60）。
         weights: result_lists と同じ長さの重みリスト。None なら全リスト重み 1.0
             （tobi/qmd 風の「先頭 search を 2x 優遇」等の実装に利用する）。
+        top_rank_bonus: True なら top-rank ボーナスを加算する（既定）。生の RRF 値を
+            検証したい場合は False。
 
     Returns:
         RRF スコア降順の SearchResult リスト。
@@ -64,6 +93,7 @@ def _rrf_fuse(
 
     scores: dict[str, float] = {}
     representatives: dict[str, SearchResult] = {}
+    top_rank: dict[str, int] = {}
 
     for weight, result_list in zip(weights, result_lists):
         for rank, result in enumerate(result_list):
@@ -71,6 +101,15 @@ def _rrf_fuse(
             scores[docid] = scores.get(docid, 0.0) + weight / (k + rank + 1)
             if docid not in representatives:
                 representatives[docid] = result
+            if docid not in top_rank or rank < top_rank[docid]:
+                top_rank[docid] = rank
+
+    if top_rank_bonus:
+        for docid, tr in top_rank.items():
+            if tr == 0:
+                scores[docid] += 0.05
+            elif tr <= 2:
+                scores[docid] += 0.02
 
     fused = [
         dataclasses.replace(representatives[docid], score=score)
@@ -89,32 +128,36 @@ def _finalize(
     all_results: bool,
     n: int,
     min_score: Optional[float],
-    candidate_top_k: Optional[int],
+    candidate_limit: Optional[int],
     reporter: Optional[ProgressReporter] = None,
 ) -> list[SearchResult]:
-    """RRF 融合後の共通後処理: rerank → min-max 正規化 → 足切り → n 制限。
+    """RRF 融合後の共通後処理: 候補確定 → rerank → 位置依存ブレンド → 足切り → n 制限。
 
     `query()` と `query_searches()` で共有する（重複回避）。
+
+    tobi/qmd に倣い、候補プール（RRF 融合順の先頭 candidate_limit 件）全体を
+    reranker にかけ、`_blend_scores` で 1/rrfRank と rerankScore を位置依存合成する。
+    min-max 正規化は行わない（min_score はブレンド絶対スコアへの閾値）。
     """
-    top_k = None if all_results else candidate_top_k
-    fused = rerank(
+    pool = (
+        fused if all_results else fused[:candidate_limit] if candidate_limit else fused
+    )
+    rr = rerank_scores(
         query_for_rerank,
-        fused,
+        pool,
         enabled=rerank_enabled,
         model=rerank_model,
-        top_k=top_k,
         reporter=reporter,
     )
-
-    fused = _minmax_scale(fused)
+    blended = _blend_scores(pool, rr)
 
     if min_score is not None:
-        fused = [r for r in fused if r.score >= min_score]
+        blended = [r for r in blended if r.score >= min_score]
 
     if not all_results:
-        fused = fused[:n]
+        blended = blended[:n]
 
-    return fused
+    return blended
 
 
 def query(
@@ -142,7 +185,7 @@ def query(
         query_text: 検索クエリ文字列。
         n: 返却件数（all_results=True の場合は無視）。
         collection: コレクション名での絞り込み（None で全コレクション）。
-        min_score: RRF スコアの最小閾値（None で足切りなし）。
+        min_score: ブレンド後スコアの最小閾値（None で足切りなし）。
         all_results: True なら全件返却（n・min_score は適用しない）。
         rerank_enabled: False なら reranker を無効化（RRF 順のまま）。
         rerank_model: 使用する reranker モデルキー（既定 "default"）。
@@ -225,7 +268,7 @@ def query(
 
     fused = _rrf_fuse(result_lists, k=RRF_K)
 
-    # reranker（融合プール全体に適用してから n 制限する。--all 時は全件を再スコア）
+    # reranker（候補プールを再スコアして位置依存ブレンド。--all 時は全件を再スコア）
     return _finalize(
         fused,
         query_for_rerank=query_text,
@@ -234,7 +277,7 @@ def query(
         all_results=all_results,
         n=n,
         min_score=min_score,
-        candidate_top_k=RERANK_TOP_K,
+        candidate_limit=settings.rerank_candidate_limit,
         reporter=reporter,
     )
 
@@ -269,8 +312,8 @@ def query_searches(
             "vec" / "hyde" は vec_indexed のときのみ vsearch で検索する（未構築時は無視して degrade）。
         collections: 絞り込むコレクション名のリスト（OR）。None で全コレクション。
         limit: 返却件数。
-        min_score: 0-1 正規化後のスコア閾値。
-        candidate_limit: reranker に渡す融合プールの上位候補数。
+        min_score: ブレンド後スコアの最小閾値。
+        candidate_limit: reranker に渡す融合プールの上位候補数（rerank+ブレンド対象）。
         rerank_enabled: False なら reranker を無効化（RRF 順のまま）。
         rerank_model: 使用する reranker モデルキー。
         reporter: 進捗表示用の ProgressReporter。
@@ -352,6 +395,6 @@ def query_searches(
         all_results=False,
         n=limit,
         min_score=min_score,
-        candidate_top_k=candidate_limit,
+        candidate_limit=candidate_limit,
         reporter=reporter,
     )

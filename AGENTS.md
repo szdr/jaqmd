@@ -223,10 +223,27 @@ ruri-v3 のプレフィックス仕様を厳守すること:
      - search（常に）
      - mosearch（morph_indexed なら）
      - vsearch（vec_indexed なら）
-3. RRF（Reciprocal Rank Fusion, k=60）で融合
-4. ruri-reranker で上位候補をリランク
-5. 結果を返却
+3. RRF（Reciprocal Rank Fusion, k=60）で融合（+ top-rank ボーナス）
+4. 候補プール（先頭 rerank_candidate_limit 件, 既定40）を ruri-reranker で再スコア
+5. 位置依存ブレンドで最終スコアを算出（min-max 正規化はしない）
+6. min_score 足切り → n 件に制限して返却
 ```
+
+スコア式は tobi/qmd（インスピレーション元）準拠:
+
+- **RRF 融合**（`_rrf_fuse`）: 各リストで `weight/(k+rank+1)`（k=60, rank0始まり）を加算。
+  さらに top-rank ボーナス（いずれかのリストで rank0 → +0.05, rank<=2 → +0.02）を加える。
+  このボーナスは最終スコアが `1/rrfRank` ベースのため、**融合順位（候補プールの並び）にのみ効く**。
+- **位置依存ブレンド**（`_blend_scores`）: 融合順位 rrfRank（候補内1始まり）について
+  `blended = rrfWeight*(1/rrfRank) + (1-rrfWeight)*rerankScore`。
+  `rrfWeight = 0.75 (rrfRank<=3) / 0.60 (<=10) / 0.40 (それ以外)`。
+  `rerankScore` は reranker の生ロジットを **sigmoid で (0,1) に正規化**した値
+  （`1/rrfRank` とスケールを合わせるための jaqmd 固有補正。tobi/qmd は reranker が 0-1 前提）。
+  reranker 無効/失敗時は `rerankScore = 1/rrfRank` として degrade（RRF 融合順位がそのまま残る）。
+- **weight**: `query()` は全リスト 1.0（tobi/qmd の「元クエリを 2x」は lex 展開を単一クエリに
+  畳み込む構造上そのまま適用できないため近似。既知の乖離）。MCP の `query_searches()` は
+  先頭 search のみ 2.0。
+- **min_score**: ブレンド後の絶対スコアに対する閾値（旧 min-max 相対閾値から意味が変わった）。
 
 利用可能なインデックスは `index_meta` を見て判定する。morph/embed 未実行でも query は動作する。
 

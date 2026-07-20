@@ -146,7 +146,7 @@ CLI 引数 > 環境変数 > 設定ファイル > 既定値
 n = 10
 format = "md"       # plain|json|md|xml|files
 full = false
-min_score = 0.2
+min_score = 0.2     # query のブレンド後スコア（0-1 目安）への足切り閾値
 reranker = "default" # default|int8
 rerank = true
 qe = true
@@ -170,6 +170,7 @@ qe_repo = "szdr/jaqmd-qe-gemma-4-e2b-it"
 [tuning]
 rrf_k = 60
 rerank_top_k = 50
+rerank_candidate_limit = 40
 ```
 
 ### 検索コマンドの既定値（CLI フラグと対応）
@@ -202,6 +203,7 @@ rerank_top_k = 50
 | `JAQMD_MODELS_QE_REPO` | `[models] qe_repo` | `szdr/jaqmd-qe-gemma-4-e2b-it` |
 | `JAQMD_TUNING_RRF_K` | `[tuning] rrf_k` | `60` |
 | `JAQMD_TUNING_RERANK_TOP_K` | `[tuning] rerank_top_k` | `50` |
+| `JAQMD_TUNING_RERANK_CANDIDATE_LIMIT` | `[tuning] rerank_candidate_limit` | `40` |
 
 これらの値はプロセス起動時（`jaqmd` コマンド実行時）に一度だけ解決されます。
 

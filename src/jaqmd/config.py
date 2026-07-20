@@ -130,6 +130,7 @@ class Settings:
     # [tuning]
     rrf_k: int = 60
     rerank_top_k: int = 50
+    rerank_candidate_limit: int = 40
 
 
 def _build() -> Settings:
@@ -191,6 +192,15 @@ def _build() -> Settings:
             g("tuning", "rerank_top_k", "JAQMD_TUNING_RERANK_TOP_K"),
             "JAQMD_TUNING_RERANK_TOP_K",
             d.rerank_top_k,
+        ),
+        rerank_candidate_limit=_as_int(
+            g(
+                "tuning",
+                "rerank_candidate_limit",
+                "JAQMD_TUNING_RERANK_CANDIDATE_LIMIT",
+            ),
+            "JAQMD_TUNING_RERANK_CANDIDATE_LIMIT",
+            d.rerank_candidate_limit,
         ),
     )
 
