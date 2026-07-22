@@ -25,9 +25,11 @@ class _DummyEncoder:
     def __init__(self, score_map: dict[str, float]):
         self.score_map = score_map
         self.calls = []
+        self.kwargs_calls = []
 
     def rerank(self, query, documents, **kwargs):
         self.calls.append((query, list(documents)))
+        self.kwargs_calls.append(kwargs)
         return [self.score_map[doc] for doc in documents]
 
 
@@ -44,6 +46,21 @@ def test_doc_text_prefers_body():
 def test_doc_text_falls_back_to_snippet():
     r = _make_result("a", body="", snippet="スニペット")
     assert _doc_text(r) == "スニペット"
+
+
+def test_doc_text_truncates_to_max_chars(monkeypatch):
+    """RERANK_MAX_CHARS を超える body は先頭 max_chars 文字に切り詰める。"""
+    monkeypatch.setattr("jaqmd.rerank.RERANK_MAX_CHARS", 5)
+    r = _make_result("a", body="あいうえおかきくけこ")
+    assert _doc_text(r) == "あいうえお"
+
+
+def test_doc_text_no_truncation_when_zero(monkeypatch):
+    """RERANK_MAX_CHARS が 0 以下なら無制限（切り詰めなし）。"""
+    monkeypatch.setattr("jaqmd.rerank.RERANK_MAX_CHARS", 0)
+    body = "あ" * 10000
+    r = _make_result("a", body=body)
+    assert _doc_text(r) == body
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +211,32 @@ def test_rerank_scores_preserves_order_and_sigmoid(monkeypatch):
     assert scores[2] == pytest.approx(0.5)
     # 全件 (0, 1) に収まる
     assert all(0.0 < s < 1.0 for s in scores)
+
+
+def test_rerank_scores_passes_batch_size(monkeypatch):
+    """rerank_scores は encoder.rerank に RERANK_BATCH_SIZE を渡す。"""
+    monkeypatch.setattr("jaqmd.rerank.RERANK_BATCH_SIZE", 4)
+    results = [_make_result("a", body="a本文")]
+    encoder = _DummyEncoder({"a本文": 0.5})
+    monkeypatch.setattr(
+        "jaqmd.rerank._get_encoder", lambda model=None, reporter=None: encoder
+    )
+
+    assert rerank_scores("q", results) is not None
+    assert encoder.kwargs_calls[0]["batch_size"] == 4
+
+
+def test_rerank_passes_batch_size(monkeypatch):
+    """rerank も encoder.rerank に RERANK_BATCH_SIZE を渡す。"""
+    monkeypatch.setattr("jaqmd.rerank.RERANK_BATCH_SIZE", 4)
+    results = [_make_result("a", body="a本文")]
+    encoder = _DummyEncoder({"a本文": 0.5})
+    monkeypatch.setattr(
+        "jaqmd.rerank._get_encoder", lambda model=None, reporter=None: encoder
+    )
+
+    rerank("q", results, top_k=None)
+    assert encoder.kwargs_calls[0]["batch_size"] == 4
 
 
 # ---------------------------------------------------------------------------

@@ -245,6 +245,41 @@ def test_finalize_min_score_filters_blended():
     assert [r.docid for r in out] == ["d0", "d1"]
 
 
+def test_finalize_all_results_caps_rerank_to_candidate_limit(monkeypatch):
+    """all_results=True でも reranker には先頭 candidate_limit 件だけ渡す。
+
+    OOM 防止のため全ヒットの一括リランクは行わず、tail は
+    rerank_score = 1/rrfRank の degrade 扱いで RRF 順を保つ。
+    """
+    fused = [_make_result(f"d{i}", score=1.0 / (i + 1)) for i in range(5)]
+    reranked_inputs = []
+
+    def fake_rerank_scores(query_text, results, **kwargs):
+        reranked_inputs.extend(r.docid for r in results)
+        # head 全件に同一スコアを返す（順位への影響を排除して件数だけ検証）
+        return [0.5] * len(results)
+
+    monkeypatch.setattr("jaqmd.search.query.rerank_scores", fake_rerank_scores)
+
+    out = _finalize(
+        fused,
+        query_for_rerank="q",
+        rerank_enabled=True,
+        rerank_model="default",
+        all_results=True,
+        n=100,
+        min_score=None,
+        candidate_limit=2,
+    )
+    # reranker には head の2件のみ渡された
+    assert reranked_inputs == ["d0", "d1"]
+    # 出力は全件（all_results）で、tail は degrade（blended = 1/rrfRank）
+    assert [r.docid for r in out] == ["d0", "d1", "d2", "d3", "d4"]
+    assert out[2].score == pytest.approx(1.0 / 3)
+    assert out[3].score == pytest.approx(1.0 / 4)
+    assert out[4].score == pytest.approx(1.0 / 5)
+
+
 # ---------------------------------------------------------------------------
 # query 統合テスト: trigram のみ（degrade）
 # ---------------------------------------------------------------------------

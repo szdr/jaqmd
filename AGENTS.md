@@ -225,6 +225,10 @@ ruri-v3 のプレフィックス仕様を厳守すること:
      - vsearch（vec_indexed なら）
 3. RRF（Reciprocal Rank Fusion, k=60）で融合（+ top-rank ボーナス）
 4. 候補プール（先頭 rerank_candidate_limit 件, 既定40）を ruri-reranker で再スコア
+     - reranker 入力は文書の先頭 rerank_max_chars 文字（既定2000, 0以下で無制限）に切り詰め、
+       rerank_batch_size（既定8）でバッチ推論（ピークメモリ抑制）
+     - --all 指定時も reranker 対象は先頭 rerank_candidate_limit 件のみ。
+       残りは rerankScore = 1/rrfRank の degrade 扱いで RRF 順を保つ
 5. 位置依存ブレンドで最終スコアを算出（min-max 正規化はしない）
 6. min_score 足切り → n 件に制限して返却
 ```

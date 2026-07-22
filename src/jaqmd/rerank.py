@@ -15,6 +15,8 @@ if TYPE_CHECKING:
     from .search.trisearch import SearchResult
 
 RERANK_TOP_K = settings.rerank_top_k
+RERANK_MAX_CHARS = settings.rerank_max_chars
+RERANK_BATCH_SIZE = settings.rerank_batch_size
 
 DEFAULT_RERANKER = "default"
 
@@ -100,8 +102,15 @@ def _get_encoder(
 
 
 def _doc_text(r: "SearchResult") -> str:
-    """rerank に渡す文書テキスト。body があればそれ、なければ snippet。"""
-    return r.body if r.body else r.snippet
+    """rerank に渡す文書テキスト。body があればそれ、なければ snippet。
+
+    ONNX 推論のシーケンス長（＝ピークメモリ）を抑えるため、先頭
+    RERANK_MAX_CHARS 文字に切り詰める（0 以下なら無制限）。
+    """
+    text = r.body if r.body else r.snippet
+    if RERANK_MAX_CHARS > 0:
+        return text[:RERANK_MAX_CHARS]
+    return text
 
 
 def _sigmoid(x: float) -> float:
@@ -150,7 +159,13 @@ def rerank_scores(
         return None
 
     with reporter.step(f"リランク ({len(results)} 件)"):
-        raw = list(encoder.rerank(query, [_doc_text(r) for r in results]))
+        raw = list(
+            encoder.rerank(
+                query,
+                [_doc_text(r) for r in results],
+                batch_size=RERANK_BATCH_SIZE,
+            )
+        )
     return [_sigmoid(float(s)) for s in raw]
 
 
@@ -195,7 +210,13 @@ def rerank(
         head, tail = results[:top_k], results[top_k:]
 
     with reporter.step(f"リランク ({len(head)} 件)"):
-        scores = list(encoder.rerank(query, [_doc_text(r) for r in head]))
+        scores = list(
+            encoder.rerank(
+                query,
+                [_doc_text(r) for r in head],
+                batch_size=RERANK_BATCH_SIZE,
+            )
+        )
     rescored = [dataclasses.replace(r, score=float(s)) for r, s in zip(head, scores)]
     rescored.sort(key=lambda r: r.score, reverse=True)
 

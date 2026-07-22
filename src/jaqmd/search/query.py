@@ -138,17 +138,24 @@ def _finalize(
     tobi/qmd に倣い、候補プール（RRF 融合順の先頭 candidate_limit 件）全体を
     reranker にかけ、`_blend_scores` で 1/rrfRank と rerankScore を位置依存合成する。
     min-max 正規化は行わない（min_score はブレンド絶対スコアへの閾値）。
+
+    all_results=True でも reranker 対象は先頭 candidate_limit 件に制限する
+    （全ヒット×全文の一括推論による OOM 防止）。tail は rerank_score = 1/rrfRank
+    の degrade 扱いでブレンドし、RRF 融合順位を保つ。
     """
     pool = (
         fused if all_results else fused[:candidate_limit] if candidate_limit else fused
     )
+    head = pool[:candidate_limit] if candidate_limit else pool
     rr = rerank_scores(
         query_for_rerank,
-        pool,
+        head,
         enabled=rerank_enabled,
         model=rerank_model,
         reporter=reporter,
     )
+    if rr is not None and len(rr) < len(pool):
+        rr = rr + [1.0 / (i + 1) for i in range(len(rr), len(pool))]
     blended = _blend_scores(pool, rr)
 
     if min_score is not None:

@@ -131,6 +131,8 @@ class Settings:
     rrf_k: int = 60
     rerank_top_k: int = 50
     rerank_candidate_limit: int = 40
+    rerank_max_chars: int = 2000
+    rerank_batch_size: int = 8
 
 
 def _build() -> Settings:
@@ -201,6 +203,16 @@ def _build() -> Settings:
             ),
             "JAQMD_TUNING_RERANK_CANDIDATE_LIMIT",
             d.rerank_candidate_limit,
+        ),
+        rerank_max_chars=_as_int(
+            g("tuning", "rerank_max_chars", "JAQMD_TUNING_RERANK_MAX_CHARS"),
+            "JAQMD_TUNING_RERANK_MAX_CHARS",
+            d.rerank_max_chars,
+        ),
+        rerank_batch_size=_as_int(
+            g("tuning", "rerank_batch_size", "JAQMD_TUNING_RERANK_BATCH_SIZE"),
+            "JAQMD_TUNING_RERANK_BATCH_SIZE",
+            d.rerank_batch_size,
         ),
     )
 

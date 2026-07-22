@@ -171,6 +171,8 @@ qe_repo = "szdr/jaqmd-qe-gemma-4-e2b-it"
 rrf_k = 60
 rerank_top_k = 50
 rerank_candidate_limit = 40
+rerank_max_chars = 2000
+rerank_batch_size = 8
 ```
 
 ### 検索コマンドの既定値（CLI フラグと対応）
@@ -204,8 +206,14 @@ rerank_candidate_limit = 40
 | `JAQMD_TUNING_RRF_K` | `[tuning] rrf_k` | `60` |
 | `JAQMD_TUNING_RERANK_TOP_K` | `[tuning] rerank_top_k` | `50` |
 | `JAQMD_TUNING_RERANK_CANDIDATE_LIMIT` | `[tuning] rerank_candidate_limit` | `40` |
+| `JAQMD_TUNING_RERANK_MAX_CHARS` | `[tuning] rerank_max_chars` | `2000` |
+| `JAQMD_TUNING_RERANK_BATCH_SIZE` | `[tuning] rerank_batch_size` | `8` |
 
 これらの値はプロセス起動時（`jaqmd` コマンド実行時）に一度だけ解決されます。
+
+`rerank_max_chars` は reranker に渡す文書テキストの最大文字数です（`0` 以下で無制限）。
+`rerank_batch_size` は reranker の推論バッチサイズです。長文ドキュメントが多い環境で
+リランクがメモリ不足になる場合は、これらを下げると改善します。
 
 ## 検索方式の使い分け
 
