@@ -158,6 +158,22 @@ def test_run_get_not_found_raises(trigram_conn):
         run_get(trigram_conn, "no/such/doc.md")
 
 
+def test_run_get_by_collection_prefixed_path(trigram_conn):
+    """query が返す filepath（collection/path 形式）をそのまま渡せる。"""
+    from jaqmd.mcp.server import run_get
+
+    result = run_get(trigram_conn, "test/a.md")
+    assert result["path"] == "a.md"
+    assert result["collection"] == "test"
+
+
+def test_run_get_collection_prefixed_with_line_suffix(trigram_conn):
+    from jaqmd.mcp.server import run_get
+
+    result = run_get(trigram_conn, "test/a.md:10")
+    assert result["path"] == "a.md"
+
+
 # ---------------------------------------------------------------------------
 # run_multi_get
 # ---------------------------------------------------------------------------
@@ -166,25 +182,62 @@ def test_run_get_not_found_raises(trigram_conn):
 def test_run_multi_get_glob(trigram_conn):
     from jaqmd.mcp.server import run_multi_get
 
-    results = run_multi_get(trigram_conn, "*.md")
-    paths = {r["path"] for r in results}
+    out = run_multi_get(trigram_conn, "*.md")
+    paths = {r["path"] for r in out["results"]}
     assert paths == {"a.md", "b.md"}
+    assert out["not_found"] == []
+
+
+def test_run_multi_get_glob_collection_prefixed(trigram_conn):
+    """glob は collection/path 形式にも照合する。"""
+    from jaqmd.mcp.server import run_multi_get
+
+    out = run_multi_get(trigram_conn, "test/*.md")
+    paths = {r["path"] for r in out["results"]}
+    assert paths == {"a.md", "b.md"}
+
+
+def test_run_multi_get_glob_no_match(trigram_conn):
+    from jaqmd.mcp.server import run_multi_get
+
+    out = run_multi_get(trigram_conn, "nomatch/*.txt")
+    assert out == {"results": [], "not_found": []}
 
 
 def test_run_multi_get_comma_separated(trigram_conn):
     from jaqmd.mcp.server import run_multi_get
 
-    results = run_multi_get(trigram_conn, "a.md,b.md")
-    paths = {r["path"] for r in results}
+    out = run_multi_get(trigram_conn, "a.md,b.md")
+    paths = {r["path"] for r in out["results"]}
     assert paths == {"a.md", "b.md"}
+    assert out["not_found"] == []
 
 
-def test_run_multi_get_skips_missing(trigram_conn):
+def test_run_multi_get_comma_collection_prefixed(trigram_conn):
+    """query の filepath をカンマ区切りでそのまま渡せる。"""
     from jaqmd.mcp.server import run_multi_get
 
-    results = run_multi_get(trigram_conn, "a.md,no/such.md")
-    assert len(results) == 1
-    assert results[0]["path"] == "a.md"
+    out = run_multi_get(trigram_conn, "test/a.md,test/b.md")
+    paths = {r["path"] for r in out["results"]}
+    assert paths == {"a.md", "b.md"}
+    assert out["not_found"] == []
+
+
+def test_run_multi_get_reports_not_found(trigram_conn):
+    from jaqmd.mcp.server import run_multi_get
+
+    out = run_multi_get(trigram_conn, "a.md,no/such.md")
+    assert len(out["results"]) == 1
+    assert out["results"][0]["path"] == "a.md"
+    assert out["not_found"] == ["no/such.md"]
+
+
+def test_run_multi_get_comma_all_missing(trigram_conn):
+    from jaqmd.mcp.server import run_multi_get
+
+    out = run_multi_get(trigram_conn, "no/such.md,also/missing.md")
+    assert out["results"] == []
+    assert out["not_found"] == ["no/such.md", "also/missing.md"]
 
 
 # ---------------------------------------------------------------------------

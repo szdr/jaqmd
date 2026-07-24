@@ -111,6 +111,19 @@ def test_get_nonexistent(tmp_cache):
     assert result.exit_code != 0
 
 
+def test_multi_get_glob_collection_prefixed(tmp_cache, doc_dir):
+    """glob は collection/path 形式のパターンにもマッチする。"""
+    (doc_dir / "a.md").write_text("# A\n内容A")
+    (doc_dir / "b.md").write_text("# B\n内容B")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+
+    result = runner.invoke(app, ["multi-get", "test/*.md"])
+    assert result.exit_code == 0
+    assert "内容A" in result.output
+    assert "内容B" in result.output
+
+
 def test_ls_command(tmp_cache, doc_dir):
     (doc_dir / "a.md").write_text("# A\n内容A")
     (doc_dir / "b.md").write_text("# B\n内容B")

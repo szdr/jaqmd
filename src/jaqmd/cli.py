@@ -19,6 +19,7 @@ from .search.vsearch import vsearch as do_vsearch
 from .store import (
     add_collection,
     connect,
+    find_documents_glob,
     get_collection,
     get_document,
     get_meta,
@@ -364,12 +365,7 @@ def multi_get_command(
             typer.echo(row["body"])
         return
 
-    rows = conn.execute(
-        """SELECT d.docid, d.collection, d.path, d.title, c.body
-           FROM documents d JOIN content c ON d.hash = c.hash
-           WHERE d.path GLOB ? AND d.active = 1""",
-        (pattern,),
-    ).fetchall()
+    rows = find_documents_glob(conn, pattern)
     if not rows:
         typer.echo(
             f"エラー: マッチするドキュメントが見つかりません: {pattern}", err=True

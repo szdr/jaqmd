@@ -2,6 +2,8 @@ import sqlite3
 
 from jaqmd.store import (
     add_collection,
+    find_documents_glob,
+    get_document,
     get_meta,
     list_active_paths,
     remove_collection,
@@ -247,3 +249,97 @@ def test_list_active_paths(conn, doc_dir):
 
     paths = list_active_paths(conn, "test")
     assert paths == {"a.md"}
+
+
+# ---------------------------------------------------------------------------
+# get_document / find_documents_glob
+# ---------------------------------------------------------------------------
+
+
+def test_get_document_by_docid(conn, doc_dir):
+    add_collection(conn, "test", str(doc_dir))
+    docid = upsert_document(
+        conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000
+    )
+    conn.commit()
+
+    row = get_document(conn, docid)
+    assert row["path"] == "a.md"
+
+
+def test_get_document_by_path(conn, doc_dir):
+    add_collection(conn, "test", str(doc_dir))
+    upsert_document(
+        conn, collection="test", path="Papers/a.md", body="内容A", title="A", mtime=1000
+    )
+    conn.commit()
+
+    row = get_document(conn, "Papers/a.md")
+    assert row["collection"] == "test"
+
+
+def test_get_document_by_collection_prefixed_path(conn, doc_dir):
+    """query が返す filepath（collection/path 形式）で解決できる。"""
+    add_collection(conn, "test", str(doc_dir))
+    upsert_document(
+        conn, collection="test", path="Papers/a.md", body="内容A", title="A", mtime=1000
+    )
+    conn.commit()
+
+    row = get_document(conn, "test/Papers/a.md")
+    assert row["path"] == "Papers/a.md"
+
+
+def test_get_document_path_wins_over_collection_prefix(conn, doc_dir):
+    """素の path とコレクション接頭辞つき解釈が衝突する場合、path 完全一致が勝つ。"""
+    add_collection(conn, "Papers", str(doc_dir))
+    add_collection(conn, "other", str(doc_dir))
+    upsert_document(
+        conn, collection="Papers", path="xxx.md", body="内容1", title="1", mtime=1000
+    )
+    upsert_document(
+        conn,
+        collection="other",
+        path="Papers/xxx.md",
+        body="内容2",
+        title="2",
+        mtime=1001,
+    )
+    conn.commit()
+
+    row = get_document(conn, "Papers/xxx.md")
+    assert row["collection"] == "other"
+
+
+def test_get_document_collection_prefix_ignores_inactive(conn, doc_dir):
+    add_collection(conn, "test", str(doc_dir))
+    upsert_document(
+        conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000
+    )
+    conn.commit()
+    soft_delete_path(conn, "test", "a.md")
+    conn.commit()
+
+    assert get_document(conn, "test/a.md") is None
+
+
+def test_find_documents_glob_matches_path_and_prefixed(conn, doc_dir):
+    add_collection(conn, "test", str(doc_dir))
+    upsert_document(
+        conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000
+    )
+    upsert_document(
+        conn, collection="test", path="sub/b.md", body="内容B", title="B", mtime=1001
+    )
+    conn.commit()
+
+    assert {r["path"] for r in find_documents_glob(conn, "*.md")} == {
+        "a.md",
+        "sub/b.md",
+    }
+    assert {r["path"] for r in find_documents_glob(conn, "test/*.md")} == {
+        "a.md",
+        "sub/b.md",
+    }
+    assert {r["path"] for r in find_documents_glob(conn, "sub/*.md")} == {"sub/b.md"}
+    assert find_documents_glob(conn, "nomatch/*.txt") == []

@@ -6,7 +6,7 @@ from typing import Literal, Optional
 from ..progress import NULL_REPORTER
 from ..search.query import query_searches
 from ..search.trisearch import SearchResult
-from ..store import connect, get_document, get_meta, get_stats
+from ..store import connect, find_documents_glob, get_document, get_meta, get_stats
 
 # ---------------------------------------------------------------------------
 # 純粋ロジック関数（conn と検証済み引数を受け、JSON-serializable な dict/list を返す）
@@ -43,7 +43,8 @@ def run_query(
             先頭の search は融合時に 2 倍の重みを持つ。
         collections: 絞り込むコレクション名（OR）。None で全コレクション。
         limit: 返却件数。
-        min_score: 0-1 正規化後のスコア閾値。
+        min_score: ブレンド後の絶対スコアに対する閾値（min-max 正規化は行わない）。
+            0.0 で足切りなし。
         candidate_limit: reranker に渡す融合プールの上位候補数。
         rerank: False なら reranker を無効化。
 
@@ -92,18 +93,23 @@ def run_get(conn: sqlite3.Connection, file: str) -> dict:
     }
 
 
-def run_multi_get(conn: sqlite3.Connection, pattern: str) -> list[dict]:
+def run_multi_get(conn: sqlite3.Connection, pattern: str) -> dict:
     """glob パターンまたはカンマ区切り docid/パスで複数ドキュメントを取得する。
 
-    見つからない参照はスキップする（`jaqmd multi-get` の挙動を踏襲）。
+    Returns:
+        `{"results": [...], "not_found": [...]}`。カンマ区切り指定で解決でき
+        なかった参照は not_found に入力順で入る。glob モードのマッチ0件は
+        「参照の未解決」ではなく正当な空集合なので not_found は常に空。
     """
     if "," in pattern:
-        out = []
+        results = []
+        not_found = []
         for ref in (r.strip() for r in pattern.split(",")):
-            row = get_document(conn, ref)
+            row = get_document(conn, ref.split(":")[0])
             if row is None:
+                not_found.append(ref)
                 continue
-            out.append(
+            results.append(
                 {
                     "docid": row["docid"],
                     "collection": row["collection"],
@@ -112,24 +118,22 @@ def run_multi_get(conn: sqlite3.Connection, pattern: str) -> list[dict]:
                     "body": row["body"],
                 }
             )
-        return out
+        return {"results": results, "not_found": not_found}
 
-    rows = conn.execute(
-        """SELECT d.docid, d.collection, d.path, d.title, c.body
-           FROM documents d JOIN content c ON d.hash = c.hash
-           WHERE d.path GLOB ? AND d.active = 1""",
-        (pattern,),
-    ).fetchall()
-    return [
-        {
-            "docid": row["docid"],
-            "collection": row["collection"],
-            "path": row["path"],
-            "title": row["title"],
-            "body": row["body"],
-        }
-        for row in rows
-    ]
+    rows = find_documents_glob(conn, pattern)
+    return {
+        "results": [
+            {
+                "docid": row["docid"],
+                "collection": row["collection"],
+                "path": row["path"],
+                "title": row["title"],
+                "body": row["body"],
+            }
+            for row in rows
+        ],
+        "not_found": [],
+    }
 
 
 def run_status(conn: sqlite3.Connection) -> dict:
@@ -196,6 +200,12 @@ def build_server():
         description=(
             "typed searches（lex/vec/hyde の型付きサブクエリ配列）による"
             "ハイブリッド検索（RRF 融合 + rerank）を実行する。"
+            "score は RRF 融合順位の逆数と reranker スコアの位置依存加重和による"
+            "絶対スコア（正規化なし）。1位 ≈ 0.8〜1.0、2位 ≈ 0.4〜0.6、"
+            "10位前後 ≈ 0.1〜0.2 と順位に応じて急減衰するため、"
+            "同一レスポンス内の相対的な確からしさとして解釈し、"
+            "別クエリのスコアと比較しないこと。"
+            "足切りの目安: minScore=0.3 で概ね上位2〜3件、0.15 で上位7件程度。"
         )
     )
     def query(
@@ -223,6 +233,8 @@ def build_server():
     @mcp.tool(
         description=(
             "パス・docid でドキュメントを1件取得する。"
+            "file には docid、path、または query が返す filepath"
+            "（`collection/path` 形式）をそのまま指定できる。"
             "docid は query/multi_get のレスポンスに含まれる `docid` の値をそのまま指定する"
             "（例: `abc123`。先頭に `#` は付けない）。"
         )
@@ -235,9 +247,16 @@ def build_server():
             conn.close()
 
     @mcp.tool(
-        description="glob パターンまたはカンマ区切りのパス/docid で複数ドキュメントを取得する。"
+        description=(
+            "glob パターンまたはカンマ区切りのパス/docid で複数ドキュメントを取得する。"
+            "パスは query が返す filepath（`collection/path` 形式）をそのまま指定できる。"
+            "glob は path と `collection/path` の両方に対して照合する。"
+            '返り値は `{"results": [...], "not_found": [...]}` で、'
+            "カンマ区切り指定で解決できなかった参照は not_found に入る"
+            "（glob でマッチ0件の場合は results が空になるだけで not_found は常に空）。"
+        )
     )
-    def multi_get(pattern: str) -> list[dict]:
+    def multi_get(pattern: str) -> dict:
         conn = connect()
         try:
             return run_multi_get(conn, pattern)

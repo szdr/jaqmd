@@ -197,6 +197,14 @@ def get_document(conn: sqlite3.Connection, ref: str) -> Optional[sqlite3.Row]:
 
     docid は先頭に "#" を付けずに指定する仕様だが、誤って付与された場合も
     救済できるよう剥がしてから照合する。
+
+    照合は 3 段フォールバック:
+    1. docid 完全一致
+    2. path 完全一致（コレクション接頭辞なしの相対パス）
+    3. ref が "/" を含む場合、先頭セグメントをコレクション名とみなして
+       (collection, path) で照合。query が返す filepath（"collection/path"
+       形式）をそのまま渡せるようにするための救済で、素の path が同じ文字列
+       を持つ場合は 2 が先に勝つ。
     """
     ref = ref.removeprefix("#")
     row = conn.execute(
@@ -207,13 +215,39 @@ def get_document(conn: sqlite3.Connection, ref: str) -> Optional[sqlite3.Row]:
     ).fetchone()
     if row is not None:
         return row
-    return conn.execute(
+    row = conn.execute(
         """SELECT d.id, d.docid, d.collection, d.path, d.title, c.body
            FROM documents d JOIN content c ON d.hash = c.hash
            WHERE d.path = ? AND d.active = 1
            LIMIT 1""",
         (ref,),
     ).fetchone()
+    if row is not None:
+        return row
+    if "/" not in ref:
+        return None
+    collection, _, path = ref.partition("/")
+    return conn.execute(
+        """SELECT d.id, d.docid, d.collection, d.path, d.title, c.body
+           FROM documents d JOIN content c ON d.hash = c.hash
+           WHERE d.collection = ? AND d.path = ? AND d.active = 1""",
+        (collection, path),
+    ).fetchone()
+
+
+def find_documents_glob(conn: sqlite3.Connection, pattern: str) -> list[sqlite3.Row]:
+    """glob パターンにマッチするドキュメントを取得する。
+
+    path（コレクション接頭辞なし）と "collection/path" の両方に照合するため、
+    query が返す filepath 形式のパターンもそのまま使える。
+    """
+    return conn.execute(
+        """SELECT d.docid, d.collection, d.path, d.title, c.body
+           FROM documents d JOIN content c ON d.hash = c.hash
+           WHERE (d.path GLOB ? OR (d.collection || '/' || d.path) GLOB ?)
+             AND d.active = 1""",
+        (pattern, pattern),
+    ).fetchall()
 
 
 # --- index_meta ---
