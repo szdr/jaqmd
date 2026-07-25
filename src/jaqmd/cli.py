@@ -26,6 +26,7 @@ from .store import (
     get_stats,
     list_active_paths,
     list_collections,
+    purge_inactive_documents,
     remove_collection,
     set_meta,
     soft_delete_path,
@@ -473,15 +474,15 @@ def status() -> None:
 def cleanup() -> None:
     """論理削除済みドキュメントを削除して DB を最適化します。"""
     conn = connect()
-    deleted = conn.execute(
-        "SELECT COUNT(*) FROM documents WHERE active = 0"
-    ).fetchone()[0]
-    conn.execute("DELETE FROM documents WHERE active = 0")
-    conn.commit()
+    counts = purge_inactive_documents(conn)
     conn.execute("VACUUM")
     typer.echo(
-        f"クリーンアップ完了: {deleted} 件の論理削除済みエントリを削除しました。"
+        f"クリーンアップ完了: {counts['documents']} 件の論理削除済みエントリを削除しました。"
     )
+    if counts["chunks"] or counts["contents"]:
+        typer.echo(
+            f"  孤児 chunk {counts['chunks']} 件 / 未参照 content {counts['contents']} 件も削除しました。"
+        )
 
 
 @app.command()

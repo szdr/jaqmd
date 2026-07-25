@@ -6,6 +6,7 @@ from jaqmd.store import (
     get_document,
     get_meta,
     list_active_paths,
+    purge_inactive_documents,
     remove_collection,
     set_meta,
     soft_delete_path,
@@ -168,6 +169,85 @@ def test_remove_collection_cascades(conn, doc_dir):
     assert fts_trigram_count == 0
     assert fts_morph_count == 0
     assert chunk_vectors_count == 0
+
+
+def _insert_chunk(conn, doc_id, docid, text="内容", seq=0):
+    conn.execute(
+        """INSERT INTO chunk_vectors(doc_id, docid, chunk_seq, chunk_pos, chunk_text, embed_model)
+           VALUES (?, ?, ?, 0, ?, 'test-model')""",
+        (doc_id, docid, seq, text),
+    )
+
+
+def _doc_id(conn, docid):
+    return conn.execute(
+        "SELECT id FROM documents WHERE docid = ?", (docid,)
+    ).fetchone()["id"]
+
+
+def test_remove_collection_with_stale_docid_chunks(conn, doc_dir):
+    """docid が更新されて取り残された chunk があっても FK エラーなく削除できる。"""
+    add_collection(conn, "test", str(doc_dir))
+    old_docid = upsert_document(
+        conn, collection="test", path="a.md", body="旧本文", title="A", mtime=1000
+    )
+    _insert_chunk(conn, _doc_id(conn, old_docid), old_docid)
+    new_docid = upsert_document(
+        conn, collection="test", path="a.md", body="新本文", title="A", mtime=1001
+    )
+    assert new_docid != old_docid
+    conn.commit()
+
+    remove_collection(conn, "test")
+
+    assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0] == 0
+
+
+def test_purge_inactive_documents(conn, doc_dir):
+    """論理削除済みドキュメントが chunk / content ごと物理削除される。"""
+    add_collection(conn, "test", str(doc_dir))
+    docid_a = upsert_document(
+        conn, collection="test", path="a.md", body="内容A", title="A", mtime=1000
+    )
+    docid_b = upsert_document(
+        conn, collection="test", path="b.md", body="内容B", title="B", mtime=1001
+    )
+    _insert_chunk(conn, _doc_id(conn, docid_a), docid_a, "内容A")
+    soft_delete_path(conn, "test", "a.md")
+    conn.commit()
+
+    counts = purge_inactive_documents(conn)
+
+    assert counts["documents"] == 1
+    assert counts["chunks"] == 1
+    assert counts["contents"] == 1
+    rows = conn.execute("SELECT docid FROM documents").fetchall()
+    assert [r["docid"] for r in rows] == [docid_b]
+    assert conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM content").fetchone()[0] == 1
+
+
+def test_purge_removes_stale_docid_chunks(conn, doc_dir):
+    """docid 更新で取り残された chunk が孤児として回収される。"""
+    add_collection(conn, "test", str(doc_dir))
+    old_docid = upsert_document(
+        conn, collection="test", path="a.md", body="旧本文", title="A", mtime=1000
+    )
+    _insert_chunk(conn, _doc_id(conn, old_docid), old_docid, "旧本文")
+    upsert_document(
+        conn, collection="test", path="a.md", body="新本文", title="A", mtime=1001
+    )
+    conn.commit()
+
+    counts = purge_inactive_documents(conn)
+
+    assert counts["documents"] == 0
+    assert counts["chunks"] == 1
+    assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0] == 0
+    # 旧本文の content も未参照になるため回収される
+    assert conn.execute("SELECT COUNT(*) FROM content").fetchone()[0] == 1
 
 
 def test_index_meta(conn):

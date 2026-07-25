@@ -152,6 +152,37 @@ def test_cleanup_command(tmp_cache, doc_dir):
     assert "完了" in result.output
 
 
+def test_cleanup_after_soft_delete(tmp_cache, doc_dir):
+    """embed 済みファイルを削除後の cleanup が FK エラーで落ちない。"""
+    from jaqmd.store import connect
+
+    (doc_dir / "a.md").write_text("# テスト\n内容")
+    runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])
+    runner.invoke(app, ["update"])
+
+    conn = connect()
+    row = conn.execute("SELECT id, docid FROM documents").fetchone()
+    conn.execute(
+        """INSERT INTO chunk_vectors(doc_id, docid, chunk_seq, chunk_pos, chunk_text, embed_model)
+           VALUES (?, ?, 0, 0, ?, 'test-model')""",
+        (row["id"], row["docid"], "内容"),
+    )
+    conn.commit()
+    conn.close()
+
+    (doc_dir / "a.md").unlink()
+    runner.invoke(app, ["update"])
+
+    result = runner.invoke(app, ["cleanup"])
+    assert result.exit_code == 0, result.output
+    assert "完了" in result.output
+
+    conn = connect()
+    assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM chunk_vectors").fetchone()[0] == 0
+    conn.close()
+
+
 def test_morph_requires_trigram_index(tmp_cache, doc_dir):
     """trigram インデックスなしでは morph が失敗する。"""
     runner.invoke(app, ["collection", "add", str(doc_dir), "--name", "test"])

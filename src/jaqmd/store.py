@@ -93,24 +93,91 @@ def remove_collection(conn: sqlite3.Connection, name: str) -> None:
            )""",
         (name,),
     )
+    # chunk_vectors は docid ではなく doc_id で辿る。upsert_document は hash 変更時に
+    # docid を採番し直すため、docid 結合だと旧 docid の行を取り残し、その doc_id が
+    # 宙に浮いて FOREIGN KEY constraint failed になる。
     if vec_available(conn):
         conn.execute(
             """DELETE FROM vectors_vec WHERE chunk_id IN (
                    SELECT cv.id FROM chunk_vectors cv
-                     JOIN documents d ON cv.docid = d.docid
+                     JOIN documents d ON cv.doc_id = d.id
                     WHERE d.collection = ?
                )""",
             (name,),
         )
     conn.execute(
-        """DELETE FROM chunk_vectors WHERE docid IN (
-               SELECT docid FROM documents WHERE collection = ?
+        """DELETE FROM chunk_vectors WHERE doc_id IN (
+               SELECT id FROM documents WHERE collection = ?
            )""",
         (name,),
     )
     conn.execute("DELETE FROM documents WHERE collection = ?", (name,))
     conn.execute("DELETE FROM collections WHERE name = ?", (name,))
     conn.commit()
+
+
+def purge_inactive_documents(conn: sqlite3.Connection) -> dict[str, int]:
+    """論理削除済みドキュメントと孤児行を物理削除する。commit まで行う。
+
+    chunk_vectors.doc_id は documents(id) を ON DELETE CASCADE なしで参照しており、
+    PRAGMA foreign_keys = ON なので、子行を先に消さないと documents の削除が失敗する。
+    """
+    counts = {
+        "documents": conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE active = 0"
+        ).fetchone()[0]
+    }
+
+    # FTS は documents_soft_delete トリガーで削除済みのはずだが、取りこぼしに備える。
+    # documents_delete トリガーは WHEN OLD.active = 1 のため active = 0 行では発火しない。
+    # 一括削除にしているのは remove_collection と同じ理由（行単位だと O(N^2)）。
+    conn.execute(
+        """DELETE FROM docs_fts_trigram WHERE docid IN (
+               SELECT docid FROM documents WHERE active = 0
+           )"""
+    )
+    conn.execute(
+        """DELETE FROM docs_fts_morph WHERE docid IN (
+               SELECT docid FROM documents WHERE active = 0
+           )"""
+    )
+    if vec_available(conn):
+        conn.execute(
+            """DELETE FROM vectors_vec WHERE chunk_id IN (
+                   SELECT cv.id FROM chunk_vectors cv
+                     JOIN documents d ON cv.doc_id = d.id
+                    WHERE d.active = 0
+               )"""
+        )
+    cur = conn.execute(
+        """DELETE FROM chunk_vectors WHERE doc_id IN (
+               SELECT id FROM documents WHERE active = 0
+           )"""
+    )
+    counts["chunks"] = cur.rowcount
+    conn.execute("DELETE FROM documents WHERE active = 0")
+
+    # 孤児回収: hash 変更で docid が変わった際に取り残された chunk と、
+    # どの documents からも参照されなくなった content。
+    if vec_available(conn):
+        conn.execute(
+            """DELETE FROM vectors_vec WHERE chunk_id IN (
+                   SELECT cv.id FROM chunk_vectors cv
+                     LEFT JOIN documents d ON cv.docid = d.docid
+                    WHERE d.docid IS NULL
+               )"""
+        )
+    cur = conn.execute(
+        "DELETE FROM chunk_vectors WHERE docid NOT IN (SELECT docid FROM documents)"
+    )
+    counts["chunks"] += cur.rowcount
+    cur = conn.execute(
+        "DELETE FROM content WHERE hash NOT IN (SELECT hash FROM documents)"
+    )
+    counts["contents"] = cur.rowcount
+
+    conn.commit()
+    return counts
 
 
 # --- documents ---
