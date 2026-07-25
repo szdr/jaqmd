@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Literal, Optional
 
+from .. import config
 from ..progress import NULL_REPORTER
 from ..search.query import query_searches
 from ..search.trisearch import SearchResult
@@ -33,10 +34,15 @@ def run_query(
     collections: Optional[list[str]] = None,
     limit: int = 10,
     min_score: float = 0.0,
-    candidate_limit: int = 40,
-    rerank: bool = True,
+    candidate_limit: Optional[int] = None,
+    rerank: Optional[bool] = None,
+    rerank_model: Optional[str] = None,
 ) -> list[dict]:
     """ハイブリッド検索（RRF 融合: trigram / morph / vector + rerank）を実行する。
+
+    candidate_limit / rerank / rerank_model は None の場合、設定
+    （config.toml の `[tuning] rerank_candidate_limit` / `[search] rerank` /
+    `[search] reranker`）にフォールバックする。
 
     Args:
         searches: `(type, text)` のリスト（type は "lex" / "vec" / "hyde"）。1〜10 件。
@@ -47,6 +53,7 @@ def run_query(
             0.0 で足切りなし。
         candidate_limit: reranker に渡す融合プールの上位候補数。
         rerank: False なら reranker を無効化。
+        rerank_model: 使用する reranker のキー（"default" / "int8" など）。
 
     Returns:
         docid/score/filepath/title/snippet を持つ dict のリスト（スコア降順）。
@@ -61,14 +68,18 @@ def run_query(
     if not (1 <= len(searches) <= 10):
         raise ValueError("searches は 1〜10 件で指定してください。")
 
+    s = config.settings
     results = query_searches(
         conn,
         searches,
         collections=collections,
         limit=limit,
         min_score=min_score,
-        candidate_limit=candidate_limit,
-        rerank_enabled=rerank,
+        candidate_limit=(
+            candidate_limit if candidate_limit is not None else s.rerank_candidate_limit
+        ),
+        rerank_enabled=rerank if rerank is not None else s.search_rerank,
+        rerank_model=rerank_model if rerank_model is not None else s.search_reranker,
         reporter=NULL_REPORTER,
     )
     return [_result_to_dict(r) for r in results]
@@ -206,6 +217,7 @@ def build_server():
             "同一レスポンス内の相対的な確からしさとして解釈し、"
             "別クエリのスコアと比較しないこと。"
             "足切りの目安: minScore=0.3 で概ね上位2〜3件、0.15 で上位7件程度。"
+            "candidateLimit / rerank 未指定時はサーバー設定に従う（既定 40 / true）。"
         )
     )
     def query(
@@ -213,8 +225,8 @@ def build_server():
         collections: Optional[list[str]] = None,
         limit: int = 10,
         minScore: float = 0.0,
-        candidateLimit: int = 40,
-        rerank: bool = True,
+        candidateLimit: Optional[int] = None,
+        rerank: Optional[bool] = None,
     ) -> list[dict]:
         conn = connect()
         try:

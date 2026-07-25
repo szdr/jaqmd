@@ -269,6 +269,10 @@ Unavailable : vsearch, query(full)
 lex/vec/hyde のサブクエリを明示的に組み立てて渡す設計です（tobi/qmd 準拠）。`vec`/`hyde` はベクトルインデックス
 未構築の場合、その search のみ無視して degrade します。
 
+`query` ツールの `rerank` / `candidateLimit` は未指定時に設定ファイルの `[search] rerank` /
+`[tuning] rerank_candidate_limit` にフォールバックし、使用する reranker も `[search] reranker` に従います
+（CLI と同様）。設定はサーバー起動時に読み込まれるため、変更後は MCP サーバーの再起動が必要です。
+
 起動:
 
 ```bash

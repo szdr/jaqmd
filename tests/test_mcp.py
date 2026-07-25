@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import dataclasses
+import os
+
 import pytest
 
 pytest.importorskip("mcp")
 
+from jaqmd import config
 from jaqmd.store import add_collection, set_meta, upsert_document
 
 
@@ -107,6 +111,115 @@ def test_run_query_limit(trigram_conn):
 
     results = run_query(trigram_conn, [("lex", "す")], limit=1)
     assert len(results) <= 1
+
+
+# ---------------------------------------------------------------------------
+# run_query の settings フォールバック
+# ---------------------------------------------------------------------------
+
+
+def _capture_query_searches(monkeypatch):
+    """server.query_searches を差し替え、渡された kwargs をキャプチャする。"""
+    captured = {}
+
+    def recorder(conn, searches, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("jaqmd.mcp.server.query_searches", recorder)
+    return captured
+
+
+def _patch_settings(monkeypatch, **overrides):
+    monkeypatch.setattr(
+        config, "settings", dataclasses.replace(config.settings, **overrides)
+    )
+
+
+def test_run_query_reranker_from_settings(trigram_conn, monkeypatch):
+    from jaqmd.mcp.server import run_query
+
+    _patch_settings(monkeypatch, search_reranker="int8")
+    captured = _capture_query_searches(monkeypatch)
+    run_query(trigram_conn, [("lex", "テスト")])
+    assert captured["rerank_model"] == "int8"
+
+
+def test_run_query_rerank_disabled_by_settings(trigram_conn, monkeypatch):
+    from jaqmd.mcp.server import run_query
+
+    _patch_settings(monkeypatch, search_rerank=False)
+    captured = _capture_query_searches(monkeypatch)
+    run_query(trigram_conn, [("lex", "テスト")])
+    assert captured["rerank_enabled"] is False
+
+
+def test_run_query_candidate_limit_from_settings(trigram_conn, monkeypatch):
+    from jaqmd.mcp.server import run_query
+
+    _patch_settings(monkeypatch, rerank_candidate_limit=25)
+    captured = _capture_query_searches(monkeypatch)
+    run_query(trigram_conn, [("lex", "テスト")])
+    assert captured["candidate_limit"] == 25
+
+
+def test_run_query_explicit_args_override_settings(trigram_conn, monkeypatch):
+    from jaqmd.mcp.server import run_query
+
+    _patch_settings(
+        monkeypatch,
+        search_reranker="int8",
+        search_rerank=False,
+        rerank_candidate_limit=25,
+    )
+    captured = _capture_query_searches(monkeypatch)
+    run_query(
+        trigram_conn,
+        [("lex", "テスト")],
+        candidate_limit=10,
+        rerank=True,
+        rerank_model="default",
+    )
+    assert captured["rerank_model"] == "default"
+    assert captured["rerank_enabled"] is True
+    assert captured["candidate_limit"] == 10
+
+
+def test_run_query_reranker_from_config_toml(trigram_conn, tmp_path, monkeypatch):
+    """config.toml → settings → run_query → rerank_scores まで設定チェーン全体を通す。"""
+    from jaqmd.mcp.server import run_query
+
+    cfg_dir = tmp_path / "jaqmd"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.toml").write_text(
+        '[search]\nreranker = "int8"\n', encoding="utf-8"
+    )
+
+    captured = {}
+
+    def spy(query, results, *, enabled=True, model=None, reporter=None):
+        captured["model"] = model
+        captured["enabled"] = enabled
+        return None
+
+    monkeypatch.setattr("jaqmd.search.query.rerank_scores", spy)
+
+    # monkeypatch の env 復元はフィクスチャ teardown 後に走るため、
+    # reload() で復元後の settings に戻せるよう env は手動で save/restore する。
+    old_xdg = os.environ.get("XDG_CONFIG_HOME")
+    os.environ["XDG_CONFIG_HOME"] = str(tmp_path)
+    try:
+        config.reload()
+        run_query(trigram_conn, [("lex", "形態素解析")])
+    finally:
+        if old_xdg is None:
+            os.environ.pop("XDG_CONFIG_HOME", None)
+        else:
+            os.environ["XDG_CONFIG_HOME"] = old_xdg
+        config.reload()
+
+    assert captured["model"] == "int8"
+    assert captured["enabled"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -281,3 +394,27 @@ def test_build_server_registers_four_tools():
     tools = asyncio.run(server.list_tools())
     names = {t.name for t in tools}
     assert names == {"query", "get", "multi_get", "status"}
+
+
+def test_query_tool_schema_stable(monkeypatch):
+    """query ツールの公開スキーマにユーザー設定値が焼き込まれない（qmd 互換の回帰防止）。"""
+    import asyncio
+
+    from jaqmd.mcp.server import build_server
+
+    _patch_settings(monkeypatch, search_rerank=False, rerank_candidate_limit=25)
+    server = build_server()
+    tools = asyncio.run(server.list_tools())
+    query_tool = next(t for t in tools if t.name == "query")
+    props = query_tool.inputSchema["properties"]
+    assert set(props) == {
+        "searches",
+        "collections",
+        "limit",
+        "minScore",
+        "candidateLimit",
+        "rerank",
+    }
+    assert props["limit"]["default"] == 10
+    assert props["candidateLimit"].get("default") is None
+    assert props["rerank"].get("default") is None
