@@ -22,7 +22,8 @@ jaqmd は日本語ドキュメントに特化したローカル検索エンジ�
 ### モデルの利用方針
 
 - Qwen 系モデルを embedding・rerank・query expansion のいずれにも使用しない
-- embedding は `cl-nagoya/ruri-v3-310m`、rerank は `cl-nagoya/ruri-v3-reranker-310m` を使う
+- embedding は `cl-nagoya/ruri-v3-310m`、rerank の既定は `cl-nagoya/ruri-v3-reranker-310m` を使う
+- rerank の軽量オプションとして `hotchpotch/japanese-reranker-xsmall-v2`（`cl-nagoya/ruri-v3-pt-30m` ベース、量子化 ONNX 約 37MB）を許可する
 - query expansion は独自開発する（`szdr/jaqmd-qe-gemma-4-e2b-it`、Gemma 4 E2B の LoRA fine-tune。GGUF 形式で llama-cpp-python 経由）
 
 ### 段階的なインデックス構築を尊重する
@@ -41,7 +42,7 @@ jaqmd は日本語ドキュメントに特化したローカル検索エンジ�
 | ベクトル推論 | fastembed（ONNX Runtime） |
 | 形態素解析 | SudachiPy（sudachidict-core） |
 | Embedding | ruri-v3-310m（ONNX） |
-| Reranker | ruri-v3-reranker-310m（ONNX） |
+| Reranker | ruri-v3-reranker-310m（ONNX）/ japanese-reranker-xsmall-v2（量子化 ONNX） |
 | CLI | Typer または Click |
 | MCP | Python MCP SDK |
 | パッケージ管理 | uv |
@@ -272,6 +273,7 @@ TextEmbedding.add_custom_model(
 注意点:
 - prefix（`検索クエリ:` / `検索文書:`）の付与は fastembed では自動化されないので、embed に渡す前に自前で付ける
 - ruri-v3-reranker の ONNX 版が公式に存在しない場合は optimum でエクスポートする（`jaqmd-qe` または別スクリプトで管理）
+- reranker は `rerank.py` の `RERANKER_MODELS` レジストリでモデルキーごとに `hf` / `model_file` / `additional_files` を持つ。`model_file` にはサブディレクトリ付きパス（例 `onnx/model_qint8_arm64.onnx`）を指定でき、fastembed は指定した 1 ファイルとトークナイザ類だけをダウンロードする
 
 ## チャンク戦略
 

@@ -868,7 +868,9 @@ def query(
         help="reranker を無効化（設定で無効化済みの場合は JAQMD_SEARCH_RERANK=true で再度有効化可能）",
     ),
     reranker: Optional[str] = typer.Option(
-        None, "--reranker", help="reranker モデル (default|int8)（既定: 設定/環境変数）"
+        None,
+        "--reranker",
+        help="reranker モデル (default|int8|japanese-reranker-xsmall-v2)（既定: 設定/環境変数）",
     ),
     no_qe: bool = typer.Option(
         False,

@@ -30,6 +30,7 @@
 |------|--------|--------|-----------|
 | Embedding | `cl-nagoya/ruri-v3-310m` | 名古屋大学 | Apache-2.0 |
 | Reranker | `cl-nagoya/ruri-v3-reranker-310m` | 名古屋大学 | Apache-2.0 |
+| Reranker（軽量） | `hotchpotch/japanese-reranker-xsmall-v2` | hotchpotch | MIT |
 | Query Expansion | `szdr/jaqmd-qe-gemma-4-e2b-it`（Gemma 4 E2B LoRA） | jaqmd | - |
 
 Embedding・Reranker は ONNX 形式で fastembed 経由、Query Expansion は GGUF 形式で llama-cpp-python 経由で読み込みます。
@@ -147,7 +148,7 @@ n = 10
 format = "md"       # plain|json|md|xml|files
 full = false
 min_score = 0.2     # query のブレンド後スコア（0-1 目安）への足切り閾値
-reranker = "default" # default|int8
+reranker = "default" # default|int8|japanese-reranker-xsmall-v2
 rerank = true
 qe = true
 
@@ -183,12 +184,24 @@ rerank_batch_size = 8
 | `JAQMD_SEARCH_FORMAT` | `[search] format` | `plain` | `--json`/`--md`/`--xml`/`--files` |
 | `JAQMD_SEARCH_FULL` | `[search] full` | `false` | `--full`/`--no-full` |
 | `JAQMD_SEARCH_MIN_SCORE` | `[search] min_score` | (なし) | `--min-score` |
-| `JAQMD_SEARCH_RERANKER` | `[search] reranker` | `default` | `--reranker`（query のみ） |
+| `JAQMD_SEARCH_RERANKER` | `[search] reranker` | `default` | `--reranker`（query のみ、選択肢は後述） |
 | `JAQMD_SEARCH_RERANK` | `[search] rerank` | `true` | `--no-rerank`（query のみ、無効化専用） |
 | `JAQMD_SEARCH_QE` | `[search] qe` | `true` | `--no-qe`（query のみ、無効化専用） |
 | `JAQMD_INDEX_GLOB` | `[index] glob` | `**/*.md` | `--glob`（collection add） |
 | `JAQMD_INDEX_BATCH_SIZE` | `[index] batch_size` | `1` | `--batch-size`（embed） |
 | `JAQMD_QUIET` | `[general] quiet` | `false` | `--quiet`/`--no-quiet`, `-q` |
+
+#### reranker モデルの選択肢
+
+`[search] reranker` / `JAQMD_SEARCH_RERANKER` / `--reranker` には次のキーを指定できます。未知のキーを指定した場合は警告を出して `default` にフォールバックします。
+
+| キー | モデル | 形式 | 目安サイズ |
+|---|---|---|---|
+| `default` | `cl-nagoya/ruri-v3-reranker-310m`（`[models] reranker` で変更可） | ONNX（fp32） | 約 1.3GB |
+| `int8` | `szdr/ruri-v3-reranker-310m-onnx_int8_arm64` | ONNX（int8, arm64 専用） | 約 320MB |
+| `japanese-reranker-xsmall-v2` | `hotchpotch/japanese-reranker-xsmall-v2` | ONNX（int8, arm64/avx2 を自動選択） | 約 37MB |
+
+`japanese-reranker-xsmall-v2` は 36.8M パラメータの軽量モデル（ruri-v3-pt-30m ベース）で、ダウンロードもロードも推論も大幅に高速です。速度・メモリを優先する環境ではこちらを選んでください。量子化 ONNX は実行環境の CPU アーキテクチャ（arm64 / それ以外）で自動的に選ばれます。
 
 `--no-rerank` / `--no-qe` は無効化専用のフラグです。設定ファイルや環境変数で `rerank`/`qe` を `false` にした場合、CLI から強制的に再度有効化するには `JAQMD_SEARCH_RERANK=true` / `JAQMD_SEARCH_QE=true` を都度指定してください（env は設定ファイルより優先されます）。
 

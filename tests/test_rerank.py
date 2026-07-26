@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import platform
+
 import pytest
 
-from jaqmd.rerank import _doc_text, _sigmoid, rerank, rerank_scores
+from jaqmd.rerank import (
+    RERANKER_MODELS,
+    _doc_text,
+    _qint8_model_file,
+    _sigmoid,
+    rerank,
+    rerank_scores,
+)
 from jaqmd.search.trisearch import SearchResult
 
 
@@ -240,6 +249,36 @@ def test_rerank_passes_batch_size(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# モデルレジストリ
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("machine", "expected"),
+    [
+        ("arm64", "onnx/model_qint8_arm64.onnx"),
+        ("aarch64", "onnx/model_qint8_arm64.onnx"),
+        ("ARM64", "onnx/model_qint8_arm64.onnx"),
+        ("x86_64", "onnx/model_qint8_avx2.onnx"),
+        ("AMD64", "onnx/model_qint8_avx2.onnx"),
+    ],
+)
+def test_qint8_model_file_selects_by_architecture(monkeypatch, machine, expected):
+    """量子化 ONNX が CPU アーキテクチャで切り替わることを検証する。"""
+    monkeypatch.setattr(platform, "machine", lambda: machine)
+    assert _qint8_model_file() == expected
+
+
+def test_registry_has_japanese_reranker_xsmall_v2():
+    """xsmall モデルが量子化 ONNX 単体構成で登録されていることを検証する。"""
+    spec = RERANKER_MODELS["japanese-reranker-xsmall-v2"]
+    assert spec["hf"] == "hotchpotch/japanese-reranker-xsmall-v2"
+    assert spec["additional_files"] is None
+    assert spec["model_file"].startswith("onnx/")
+    assert spec["model_file"].endswith(".onnx")
+
+
+# ---------------------------------------------------------------------------
 # 統合テスト: 実モデルをロード（重い・既定スキップ）
 # ---------------------------------------------------------------------------
 
@@ -287,3 +326,25 @@ def test_rerank_integration_handles_mixed_length_documents():
     out = rerank("瑠璃色はどんな色？", results, top_k=None)
     assert {r.docid for r in out} == {"short", "long", "short2"}
     assert out[0].docid == "long"
+
+
+@pytest.mark.integration
+def test_rerank_scores_integration_xsmall_v2():
+    """xsmall（量子化 ONNX）が実際にロードでき、関連文書を高く採点することを検証する。"""
+    results = [
+        _make_result(
+            "irrelevant",
+            body="今日の天気は晴れで、気温は25度前後の見込みです。",
+        ),
+        _make_result(
+            "relevant",
+            body="瑠璃色（るりいろ）は、紫みを帯びた濃い青。瑠璃の色から。",
+        ),
+    ]
+    scores = rerank_scores(
+        "瑠璃色はどんな色？", results, model="japanese-reranker-xsmall-v2"
+    )
+    assert scores is not None, "モデルのロードに失敗している（degrade して None）"
+    assert len(scores) == 2
+    assert all(0.0 < s < 1.0 for s in scores)
+    assert scores[1] > scores[0]

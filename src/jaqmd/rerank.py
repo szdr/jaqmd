@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import os
+import platform
 import sys
 from typing import TYPE_CHECKING, Optional
 
@@ -20,9 +21,23 @@ RERANK_BATCH_SIZE = settings.rerank_batch_size
 
 DEFAULT_RERANKER = "default"
 
+
+def _qint8_model_file() -> str:
+    """japanese-reranker-xsmall-v2 の量子化 ONNX を CPU アーキテクチャで選ぶ。
+
+    arm64 / aarch64（Apple Silicon 等）は arm64 版、それ以外（x86_64）は
+    互換性の広い avx2 版を使う（avx512/vnni 版もあるが判定コストに見合わない）。
+    """
+    machine = platform.machine().lower()
+    if machine in {"arm64", "aarch64"}:
+        return "onnx/model_qint8_arm64.onnx"
+    return "onnx/model_qint8_avx2.onnx"
+
+
 # reranker モデルレジストリ。fastembed の add_custom_model 登録に必要な情報を保持する。
-# int8 版は model.onnx 単体（additional_files 無し）でフル版とファイル構成が異なるため、
-# モデルごとに登録メタ情報を分けて持つ。
+# ファイル構成はモデルごとに異なる（フル版は model.onnx + 外部 weights、int8 版は
+# model.onnx 単体、xsmall は onnx/ 配下の量子化ファイル単体）ため、登録メタ情報を
+# モデルごとに分けて持つ。
 RERANKER_MODELS: dict[str, dict] = {
     "default": {
         "hf": settings.reranker_model,
@@ -32,6 +47,11 @@ RERANKER_MODELS: dict[str, dict] = {
     "int8": {
         "hf": "szdr/ruri-v3-reranker-310m-onnx_int8_arm64",
         "model_file": "model.onnx",
+        "additional_files": None,
+    },
+    "japanese-reranker-xsmall-v2": {
+        "hf": "hotchpotch/japanese-reranker-xsmall-v2",
+        "model_file": _qint8_model_file(),
         "additional_files": None,
     },
 }
@@ -82,7 +102,7 @@ def _get_encoder(
         label += "(初回はダウンロードのため数分かかる場合があります)"
     try:
         with reporter.step(label):
-            # ruri-v3-reranker-310m の ONNX 版カスタムモデル登録
+            # ONNX 版 reranker のカスタムモデル登録
             TextCrossEncoder.add_custom_model(
                 model=model,
                 sources=ModelSource(hf=spec["hf"]),
