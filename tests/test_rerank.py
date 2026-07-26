@@ -4,6 +4,7 @@ import platform
 
 import pytest
 
+from jaqmd import config
 from jaqmd.rerank import (
     RERANKER_MODELS,
     _doc_text,
@@ -267,6 +268,17 @@ def test_qint8_model_file_selects_by_architecture(monkeypatch, machine, expected
     """量子化 ONNX が CPU アーキテクチャで切り替わることを検証する。"""
     monkeypatch.setattr(platform, "machine", lambda: machine)
     assert _qint8_model_file() == expected
+
+
+def test_registry_default_is_not_configurable():
+    """default エントリの repo ID がレジストリ内で固定されていることを検証する。
+
+    設定ファイルから差し替える手段（旧 `[models] reranker`）は廃止した。
+    settings を参照すると import 時に値が焼き込まれ config.reload() に追従できない。
+    """
+    spec = RERANKER_MODELS["default"]
+    assert spec["hf"] == "szdr/ruri-v3-reranker-310m-onnx"
+    assert not hasattr(config.settings, "reranker_model")
 
 
 def test_registry_has_japanese_reranker_xsmall_v2():

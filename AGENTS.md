@@ -274,6 +274,8 @@ TextEmbedding.add_custom_model(
 - prefix（`検索クエリ:` / `検索文書:`）の付与は fastembed では自動化されないので、embed に渡す前に自前で付ける
 - ruri-v3-reranker の ONNX 版が公式に存在しない場合は optimum でエクスポートする（`jaqmd-qe` または別スクリプトで管理）
 - reranker は `rerank.py` の `RERANKER_MODELS` レジストリでモデルキーごとに `hf` / `model_file` / `additional_files` を持つ。`model_file` にはサブディレクトリ付きパス（例 `onnx/model_qint8_arm64.onnx`）を指定でき、fastembed は指定した 1 ファイルとトークナイザ類だけをダウンロードする
+- reranker モデルを増やす唯一のルートはこのレジストリへの追記。設定ファイルからリポジトリ ID を直接差し込む手段は持たない（モデルごとに ONNX のファイル構成が違い、リポジトリ ID だけでは登録情報が揃わないため）。利用者は `[search] reranker` でレジストリのキーを選ぶ
+- レジストリは `settings` を参照しない。モジュール import 時に設定値を焼き込むと `config.reload()` に追従できなくなる
 
 ## チャンク戦略
 

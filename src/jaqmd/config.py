@@ -125,7 +125,6 @@ class Settings:
     models_dir: Optional[str] = None
     # [models]
     embed_model: str = "sirasagi62/ruri-v3-310m-ONNX"
-    reranker_model: str = "szdr/ruri-v3-reranker-310m-onnx"
     qe_repo: str = "szdr/jaqmd-qe-gemma-4-e2b-it"
     # [tuning]
     rrf_k: int = 60
@@ -183,9 +182,6 @@ def _build() -> Settings:
         db_path=_raw(table, "paths", "db", "JAQMD_DB_PATH"),
         models_dir=_raw(table, "paths", "models", "JAQMD_MODELS_DIR"),
         embed_model=_as_str(g("models", "embed", "JAQMD_MODELS_EMBED"), d.embed_model),
-        reranker_model=_as_str(
-            g("models", "reranker", "JAQMD_MODELS_RERANKER"), d.reranker_model
-        ),
         qe_repo=_as_str(g("models", "qe_repo", "JAQMD_MODELS_QE_REPO"), d.qe_repo),
         rrf_k=_as_int(
             g("tuning", "rrf_k", "JAQMD_TUNING_RRF_K"), "JAQMD_TUNING_RRF_K", d.rrf_k

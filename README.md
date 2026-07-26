@@ -165,7 +165,6 @@ models = "/data/jaqmd/models"
 
 [models]
 embed = "sirasagi62/ruri-v3-310m-ONNX"
-reranker = "szdr/ruri-v3-reranker-310m-onnx"
 qe_repo = "szdr/jaqmd-qe-gemma-4-e2b-it"
 
 [tuning]
@@ -197,11 +196,15 @@ rerank_batch_size = 8
 
 | キー | モデル | 形式 | 目安サイズ |
 |---|---|---|---|
-| `default` | `cl-nagoya/ruri-v3-reranker-310m`（`[models] reranker` で変更可） | ONNX（fp32） | 約 1.3GB |
+| `default` | `szdr/ruri-v3-reranker-310m-onnx`（`cl-nagoya/ruri-v3-reranker-310m` の ONNX 変換） | ONNX（fp32） | 約 1.3GB |
 | `int8` | `szdr/ruri-v3-reranker-310m-onnx_int8_arm64` | ONNX（int8, arm64 専用） | 約 320MB |
 | `japanese-reranker-xsmall-v2` | `hotchpotch/japanese-reranker-xsmall-v2` | ONNX（int8, arm64/avx2 を自動選択） | 約 37MB |
 
 `japanese-reranker-xsmall-v2` は 36.8M パラメータの軽量モデル（ruri-v3-pt-30m ベース）で、ダウンロードもロードも推論も大幅に高速です。速度・メモリを優先する環境ではこちらを選んでください。量子化 ONNX は実行環境の CPU アーキテクチャ（arm64 / それ以外）で自動的に選ばれます。
+
+reranker は HuggingFace のリポジトリ ID を直接指定するのではなく、上記のキーで選びます。モデルごとに ONNX のファイル構成が異なり、リポジトリ ID だけでは登録に必要な情報が揃わないためです。選択肢を増やす場合は `src/jaqmd/rerank.py` の `RERANKER_MODELS` レジストリにエントリを追記してください。
+
+> **破壊的変更（0.1.12）**: `[models] reranker` / `JAQMD_MODELS_RERANKER` を削除しました。これは `default` キーの参照先リポジトリだけを差し替える設定で、`int8` や `japanese-reranker-xsmall-v2` を選んでいる場合は無視される紛らわしいものでした。reranker の指定は `[search] reranker` に一本化されています。設定ファイルに残っていても無視されるだけで、エラーにはなりません。
 
 `--no-rerank` / `--no-qe` は無効化専用のフラグです。設定ファイルや環境変数で `rerank`/`qe` を `false` にした場合、CLI から強制的に再度有効化するには `JAQMD_SEARCH_RERANK=true` / `JAQMD_SEARCH_QE=true` を都度指定してください（env は設定ファイルより優先されます）。
 
@@ -214,7 +217,6 @@ rerank_batch_size = 8
 | `JAQMD_DB_PATH` | `[paths] db` | `$XDG_CACHE_HOME/jaqmd/index.sqlite` |
 | `JAQMD_MODELS_DIR` | `[paths] models` | `$XDG_CACHE_HOME/jaqmd/models` |
 | `JAQMD_MODELS_EMBED` | `[models] embed` | `sirasagi62/ruri-v3-310m-ONNX` |
-| `JAQMD_MODELS_RERANKER` | `[models] reranker` | `szdr/ruri-v3-reranker-310m-onnx` |
 | `JAQMD_MODELS_QE_REPO` | `[models] qe_repo` | `szdr/jaqmd-qe-gemma-4-e2b-it` |
 | `JAQMD_TUNING_RRF_K` | `[tuning] rrf_k` | `60` |
 | `JAQMD_TUNING_RERANK_TOP_K` | `[tuning] rerank_top_k` | `50` |

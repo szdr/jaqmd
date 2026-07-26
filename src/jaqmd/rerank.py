@@ -38,9 +38,11 @@ def _qint8_model_file() -> str:
 # ファイル構成はモデルごとに異なる（フル版は model.onnx + 外部 weights、int8 版は
 # model.onnx 単体、xsmall は onnx/ 配下の量子化ファイル単体）ため、登録メタ情報を
 # モデルごとに分けて持つ。
+# このレジストリは settings を参照しない（import 時に設定値を焼き込むと config.reload()
+# に追従できなくなるため）。モデルを増やすときはここにエントリを追記する。
 RERANKER_MODELS: dict[str, dict] = {
     "default": {
-        "hf": settings.reranker_model,
+        "hf": "szdr/ruri-v3-reranker-310m-onnx",
         "model_file": "model.onnx",
         "additional_files": ["model.onnx.data"],
     },

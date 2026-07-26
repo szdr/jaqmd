@@ -49,3 +49,17 @@ def test_rerank_batch_size_from_env(monkeypatch):
     monkeypatch.setenv("JAQMD_TUNING_RERANK_BATCH_SIZE", "2")
     settings = config.reload()
     assert settings.rerank_batch_size == 2
+
+
+def test_models_reranker_is_removed(monkeypatch):
+    """廃止した [models] reranker / JAQMD_MODELS_RERANKER が復活していないこと。
+
+    reranker モデルの選択は [search] reranker のレジストリキーに一本化した。
+    """
+    monkeypatch.setenv("JAQMD_MODELS_RERANKER", "foo/bar")
+    settings = config.reload()
+    assert not hasattr(settings, "reranker_model")
+
+    from jaqmd.rerank import RERANKER_MODELS
+
+    assert RERANKER_MODELS["default"]["hf"] == "szdr/ruri-v3-reranker-310m-onnx"
