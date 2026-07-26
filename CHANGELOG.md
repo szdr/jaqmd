@@ -1,3 +1,8 @@
+## [0.1.12] - 2026-07-26
+
+### 🚜 Refactor
+
+- [**breaking**] Reranker の指定を search.reranker に一本化する
 ## [0.1.11] - 2026-07-26
 
 ### 🚀 Features
