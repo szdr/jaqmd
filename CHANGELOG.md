@@ -1,3 +1,8 @@
+## [0.1.11] - 2026-07-26
+
+### 🚀 Features
+
+- 軽量 reranker japanese-reranker-xsmall-v2 を選択可能にする
 ## [0.1.10] - 2026-07-25
 
 ### 🐛 Bug Fixes

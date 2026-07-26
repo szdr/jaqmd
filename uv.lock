@@ -387,7 +387,7 @@ wheels = [
 
 [[package]]
 name = "jaqmd"
-version = "0.1.10"
+version = "0.1.11"
 source = { editable = "." }
 dependencies = [
     { name = "rich" },
