@@ -27,7 +27,9 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          # 明示ピン: バージョン解決のための外部 fetch を避け、CI を再現可能にする
+          # uv の版が勝手に上がらないよう固定する（v0.2.0 のリリースで検証済み）。
+          # なお setup-uv はダウンロード URL の解決で versions manifest を引くため、
+          # ピンしても外部 fetch 自体はなくならない。
           version: "0.12.0"
           enable-cache: true
 
