@@ -2,6 +2,8 @@
 
 日本語ドキュメントに特化したローカル検索エンジン。
 
+リポジトリ: [github.com/szdr/jaqmd](https://github.com/szdr/jaqmd)
+
 [tobi/qmd](https://github.com/tobi/qmd) からインスピレーションを受けつつ、日本語テキストの検索品質に振り切った設計を採用しています。
 
 ## 特徴
@@ -337,7 +339,7 @@ rm -rf ~/.cache/jaqmd/models/models--szdr--ruri-v3-reranker-310m-onnx
 - **形態素解析**: SudachiPy。表記ゆれの正規化に強い
 - **trigram**: SQLite FTS5 の trigram tokenizer を利用し、外部依存なしで実現
 
-詳細な実装方針は [AGENTS.md](./AGENTS.md) を参照してください。
+詳細な実装方針は [AGENTS.md](https://github.com/szdr/jaqmd/blob/main/AGENTS.md) を参照してください。
 
 
 ## Credits
