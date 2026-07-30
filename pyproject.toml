@@ -7,7 +7,7 @@ name = "jaqmd"
 version = "0.1.13"
 description = "日本語ドキュメントに特化したローカル検索エンジン"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "typer>=0.12",
     "sqlite-vec>=0.1",
@@ -51,7 +51,7 @@ markers = [
 addopts = "-m 'not integration'"
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py311"
 line-length = 88
 
 [tool.ruff.lint]

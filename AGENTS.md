@@ -37,7 +37,7 @@ jaqmd は日本語ドキュメントに特化したローカル検索エンジ�
 
 | 領域 | 採用技術 |
 |------|----------|
-| 言語 | Python 3.10+ |
+| 言語 | Python 3.11+ |
 | ストレージ | SQLite + sqlite-vec + FTS5 |
 | ベクトル推論 | fastembed（ONNX Runtime） |
 | 形態素解析 | SudachiPy（sudachidict-core） |

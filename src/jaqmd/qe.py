@@ -29,7 +29,7 @@ def _suppress_native_stderr():
     """llama.cpp のネイティブコードが fd レベルで stderr に吐くログを抑制する。"""
     try:
         stderr_fd = sys.stderr.fileno()
-    except AttributeError, OSError, ValueError:
+    except (AttributeError, OSError, ValueError):
         # 実 fd を持たない（テスト等でキャプチャされた）場合は何もしない
         yield
         return

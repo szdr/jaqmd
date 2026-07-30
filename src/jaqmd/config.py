@@ -79,7 +79,7 @@ def _as_int(value: Any, env: str, default: int) -> int:
         return default
     try:
         return int(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         print(
             f"警告: {env} の値が不正です（{value!r}）。既定値 {default} を使用します。",
             file=sys.stderr,
@@ -92,7 +92,7 @@ def _as_float(value: Any, env: str, default: Optional[float]) -> Optional[float]
         return default
     try:
         return float(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         print(
             f"警告: {env} の値が不正です（{value!r}）。既定値 {default} を使用します。",
             file=sys.stderr,

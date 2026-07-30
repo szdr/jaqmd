@@ -13,6 +13,14 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 下限（requires-python）と開発時のバージョンの両端を検証する
+        python-version: ["3.11", "3.14"]
+    env:
+      # .python-version を上書きし、matrix のバージョンで venv を作らせる
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v7
 
@@ -22,7 +30,7 @@ jobs:
           enable-cache: true
 
       - name: Set up Python
-        run: uv python install 3.14
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Install just
         uses: extractions/setup-just@v4
