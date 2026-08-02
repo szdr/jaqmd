@@ -1,3 +1,16 @@
+## [0.2.1] - 2026-08-02
+
+### 🐛 Bug Fixes
+
+- *(deps)* Mcp を 2.0 未満に制限する
+
+### 📚 Documentation
+
+- *(ci)* Uv ピン留めのコメントを実態に合わせる
+
+### ⚙️ Miscellaneous Tasks
+
+- Setup-uv の uv バージョンをピン留めする
 ## [0.2.0] - 2026-07-30
 
 ### 🚀 Features
