@@ -26,14 +26,14 @@ morph  = [
 ]
 vector = ["fastembed>=0.8"]
 qe     = ["llama-cpp-python>=0.3", "huggingface-hub>=0.20"]
-mcp    = ["mcp>=1.2"]
+mcp    = ["mcp>=1.2,<2.0"]
 all    = [
     "sudachipy>=0.6",
     "sudachidict-core",
     "fastembed>=0.8",
     "llama-cpp-python>=0.3",
     "huggingface-hub>=0.20",
-    "mcp>=1.2",
+    "mcp>=1.2,<2.0",
 ]
 
 [project.scripts]
